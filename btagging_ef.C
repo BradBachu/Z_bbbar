@@ -99,17 +99,164 @@ std::vector<int> Highest_pt_pair_index(TClonesArray* jetarray )
 	highest_pt_pair_index.push_back(pt2_index) ;
 return highest_pt_pair_index;
 }
-"JetProbability", 
-								"", 
-								"" , 
-								"", 
-								"", 
-								"", 
-								"",
-								"", 
-								""/*, 
-								"TrackCountingHighEff" ,
-								"TrackCountingHighPur" */
+
+Bool_t two_b_quarks(  std::vector<Double_t> *genPdgId) 
+{
+	Bool_t two_b_quarks ;
+	int n_b_quarks = 0 ;
+	for (int i = 0; i < genPdgId->size(); ++i)
+	{
+		if ( abs(genPdgId->at(i)) == 5 )
+		{
+			n_b_quarks = n_b_quarks + 1 ;
+		}
+	}
+	if (n_b_quarks > 1)
+	{
+		two_b_quarks = kTRUE ;
+		// cout << "Has 2 b-quarks"<< endl;
+	}
+	else
+	{
+		two_b_quarks = kFALSE ;
+		// cout <<"Doesnt have 2 b-quarks"<< endl;
+	}
+return two_b_quarks ;
+}
+
+Bool_t Z_pT_Range(TClonesArray* jetarray , Double_t Z_pT_Min, Double_t Z_pT_Max)
+{
+	Bool_t In_range;
+	std::vector<int> highest_pt_pair_index =  Highest_pt_pair_index(jetarray);
+	TLorentzVector* jet1 = dynamic_cast<TLorentzVector*>(jetarray->At(highest_pt_pair_index.at(0))) ;
+	TLorentzVector* jet2 = dynamic_cast<TLorentzVector*>(jetarray->At(highest_pt_pair_index.at(1))) ;
+	highest_pt_pair_index.clear() ;
+	TLorentzVector Z = *jet1 + *jet2 ;
+	Double_t Z_pt = Z.Pt();
+	if (  (Z_pt > Z_pT_Max) || (Z_pt < Z_pT_Min) ) 
+	{
+		In_range = kFALSE ;
+		// cout << "Not in Range"<<endl;
+	}
+	else 
+	{
+		In_range = kTRUE ;
+		// cout << "In Range "<< endl;
+	}
+return In_range ;
+}
+
+Bool_t Z_pT_Range_gen_level(std::vector<Double_t> *genPdgId , TClonesArray *genP4, std::vector<Double_t> *genMotherPdgId , Double_t Z_pT_Min, Double_t  Z_pT_Max)
+{
+	std::vector<int> matched_idex;
+	Bool_t In_range;
+	//loop through the genPdgId's and Mothers to see which b-quarks are from Z's
+	for (int i = 0; i < genPdgId->size(); ++i)
+	{
+		if ( abs(genPdgId->at(i)) == 5 && genMotherPdgId->at(i) == 23 )	
+		{
+			matched_idex.push_back(i);
+		}
+	}
+	if ( !(matched_idex.size() == 2) ) 
+	{
+		cout << "did not find 2 b-quarks that came from a Z" << endl;
+	}
+	TLorentzVector* gen1_b_P4 = dynamic_cast<TLorentzVector*>(genP4->At(matched_idex.at(0))) ;
+	TLorentzVector* gen2_b_P4 = dynamic_cast<TLorentzVector*>(genP4->At(matched_idex.at(1))) ;
+	TLorentzVector Z = *gen1_b_P4 + *gen2_b_P4 ;
+	if ( (Z.Pt() > Z_pT_Min) && (Z.Pt() < Z_pT_Max) )
+	{
+		In_range = kTRUE ;
+	}
+	else
+	{
+		In_range = kFALSE;
+	}
+return In_range;
+}
+
+Double_t Get_Acceptance_in_ZpT_Range(Double_t Z_pT_Min , Double_t Z_pT_Max)
+{
+	TFile *f =new TFile("../../nero.root","READ");
+    TTree *tree = (TTree*)f->FindObjectAny("events");
+    cout<< "Getting acceptance measurements in range "<<Z_pT_Min << " " << Z_pT_Max << endl;
+	
+	std::vector<Double_t> *jetMotherPdgId  = new std::vector<Double_t>;
+	std::vector<Double_t> *genPdgId = new std::vector<Double_t>;
+	std::vector<Double_t> *genMotherPdgId = new std::vector<Double_t>;
+	TClonesArray *jetP4 = new TClonesArray();
+	TClonesArray *genP4 = new TClonesArray();
+
+	tree->SetBranchAddress("jetMotherPdgId", &jetMotherPdgId) ;
+	tree->SetBranchAddress("genPdgId", &genPdgId) ;
+	tree->SetBranchAddress("genMotherPdgId", &genMotherPdgId) ;
+	tree->SetBranchAddress("jetP4", &jetP4) ;
+	tree->SetBranchAddress("genP4", &genP4) ;
+
+	//create variables to keep track of bquark acceptance ratio
+	Double_t total_gen_b = 0 ;
+	Double_t detector_acceptance_gen_b = 0 ;
+
+	for (int i = 0; i < tree->GetEntries(); ++i)
+	{
+		tree->GetEntry(i) ;
+		//make sure there are at least 2 b-quarks
+		if (two_b_quarks(genPdgId) == kFALSE) continue;
+		//make sure there are at least 2 jets
+		// if ( jetP4->GetEntries() == 0 || jetP4->GetEntries() == 1) continue;
+		// make sure it is in the Z_pt range
+		// if (Z_pT_Range(jetP4 ,  Z_pT_Min,  Z_pT_Max) == kFALSE) continue;
+		if (Z_pT_Range_gen_level(genPdgId , genP4, genMotherPdgId ,  Z_pT_Min,  Z_pT_Max) == kFALSE) continue;
+		// cout  << "Main criteria passed" << endl;
+		//loop over vector in the entry 
+		for (int j = 0; j < genPdgId->size(); ++j)
+		{
+			// if it is a b-quark and came from a Z
+			if (abs((genPdgId->at(j) == 5)) && (genMotherPdgId->at(j) == 22))
+			{
+				// cout << "b-quark came from Z"<< endl;
+				total_gen_b = total_gen_b + 1 ;
+				TLorentzVector* gen_b_P4 = dynamic_cast<TLorentzVector*>(genP4->At(j)) ;
+				//check if it is in the fidicual acceptance
+				if ( abs(gen_b_P4->Eta() ) < 2.4 )
+					{
+						// cout << "b-quark in acceptance"<< endl;
+						detector_acceptance_gen_b = detector_acceptance_gen_b + 1 ;
+					}
+			}
+		}
+	}
+		cout << "total = "<< total_gen_b << endl;
+		cout << "accepted = " << detector_acceptance_gen_b << endl;
+		Double_t ratio;
+		if (total_gen_b == 0)
+		{
+			ratio = 0 ;
+		}
+		else
+		{
+		ratio = detector_acceptance_gen_b / total_gen_b ;
+		}
+	
+	cout << "ratio = " << ratio << endl;
+return ratio ;
+}
+
+void Acceptance_function_Z_pT(Double_t Z_pt_bins[], int size)
+{
+	TH1F* h_acceptance_ratio = new TH1F("h_acceptance_ratio", "Acceptance of Z#Rightarrow b #bar{b}", size-1 , Z_pt_bins);
+	for (int i = 0; i < size-1; ++i)
+	{
+		h_acceptance_ratio->SetBinContent( (i+1) ,  Get_Acceptance_in_ZpT_Range(Z_pt_bins[i] , Z_pt_bins[i+1]) );
+	}
+	h_acceptance_ratio->GetXaxis()->SetTitle("Z p_{#perp}");
+	h_acceptance_ratio->GetYaxis()->SetTitle("Acceptance");
+	TCanvas *c = new TCanvas();
+	h_acceptance_ratio->Draw("HIST ");
+	c->SaveAs("Acceptance.png");
+	c->SaveAs("Acceptance.pdf");
+}
 
 std::vector<Double_t> Discrimination_limits(TString btagger)
 {
@@ -139,7 +286,7 @@ std::vector< std::vector<Double_t> >  Function_of_Z_pt( TString btagger , Double
 	//Create the vectors to store the Efficiency and Fake rate
 	std::vector<Double_t> v_eff; v_eff.clear() ;
 	std::vector<Double_t> v_fake; v_fake.clear();
-	//Create vector to store the vectors of ciirdunttes
+	//Create vector to store the vectors of coordinates
 	std::vector<std::vector<Double_t> > v_coordinate; v_coordinate.clear() ;
 
 	// TLorentzVector* jetp4 = dynamic_cast<TLorentzVector*> obj ;
@@ -147,14 +294,16 @@ std::vector< std::vector<Double_t> >  Function_of_Z_pt( TString btagger , Double
 	TFile *f =new TFile("../../nero.root","READ");
     TTree *tree = (TTree*)f->FindObjectAny("events");
 	
-	// cout << "1" << endl;
 	std::vector<float> *var_btagger = new std::vector<float> ;	
 	std::vector<Double_t> *jetMotherPdgId  = new std::vector<Double_t>;
+	std::vector<Double_t> *genPdgId = new std::vector<Double_t>;
+	std::vector<Double_t> *genMotherPdgId = new std::vector<Double_t>;
 	TClonesArray *jetp4 = new TClonesArray();
-	// BareJets jets;
 
 	tree->SetBranchAddress(btagger, &var_btagger) ;
 	tree->SetBranchAddress("jetMotherPdgId", &jetMotherPdgId) ;
+	tree->SetBranchAddress("genPdgId", &genPdgId) ;
+	tree->SetBranchAddress("genMotherPdgId", &genMotherPdgId) ;
 	tree->SetBranchAddress("jetP4", &jetp4) ;
 
 	TLorentzVector* jet1 = new TLorentzVector() ;
@@ -394,9 +543,6 @@ void Make_ROC_Curves_for_all_taggers(TString btagger_list[], Int_t size, Double_
 
 void btagging_ef()
 {
-
-	TFile *f =new TFile("../../nero.root","READ");
-    TTree *tree = (TTree*)f->FindObjectAny("events");
 	Double_t n_coordinates = 11 ;
 	Double_t Z_pt_bins[4] = {0, 250, 500, 1000} ;
 	// Double_t Z_pt_bins[2] = {500, 1000} ;
@@ -416,12 +562,11 @@ void btagging_ef()
 							  } ;
 
 
-	for (int i = 0; i < 1; ++i)
-	{
-		Make_ROC_Curves_for_all_taggers(btagger_list , size, n_coordinates, Z_pt_bins[i], Z_pt_bins[i+1]);
-	}
-		// Make_ROC_Curves_for_all_taggers(btagger_list , size, n_coordinates, 500, 1000);
-
+	// for (int i = 0; i < 3; ++i)
+	// {
+	// 	Make_ROC_Curves_for_all_taggers(btagger_list , size, n_coordinates, Z_pt_bins[i], Z_pt_bins[i+1]);
+	// }
+	Acceptance_function_Z_pT( Z_pt_bins,  4);
 } 
 
 
