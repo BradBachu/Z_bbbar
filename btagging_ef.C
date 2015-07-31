@@ -158,10 +158,6 @@ Bool_t Z_pT_Range_gen_level(std::vector<Double_t> *genPdgId , TClonesArray *genP
 			matched_idex.push_back(i);
 		}
 	}
-	if ( !(matched_idex.size() == 2) ) 
-	{
-		cout << "did not find 2 b-quarks that came from a Z" << endl;
-	}
 	TLorentzVector* gen1_b_P4 = dynamic_cast<TLorentzVector*>(genP4->At(matched_idex.at(0))) ;
 	TLorentzVector* gen2_b_P4 = dynamic_cast<TLorentzVector*>(genP4->At(matched_idex.at(1))) ;
 	TLorentzVector Z = *gen1_b_P4 + *gen2_b_P4 ;
@@ -174,6 +170,19 @@ Bool_t Z_pT_Range_gen_level(std::vector<Double_t> *genPdgId , TClonesArray *genP
 		In_range = kFALSE;
 	}
 return In_range;
+}
+
+int matched_b_to_Z(std::vector<Double_t> *genPdgId, std::vector<Double_t> *genMotherPdgId)
+{
+	int count = 0 ;
+	for (int i = 0; i < genPdgId->size(); ++i)
+	{
+		if ( (abs(genPdgId->at(i)) ==5) && (genMotherPdgId->at(i)== 23))
+		{
+			count = count + 1;
+		}
+	}
+return count;
 }
 
 Double_t Get_Acceptance_in_ZpT_Range(Double_t Z_pT_Min , Double_t Z_pT_Max)
@@ -204,6 +213,7 @@ Double_t Get_Acceptance_in_ZpT_Range(Double_t Z_pT_Min , Double_t Z_pT_Max)
 		//make sure there are at least 2 b-quarks
 		if (two_b_quarks(genPdgId) == kFALSE) continue;
 		//make sure there are at least 2 jets
+		if (matched_b_to_Z(genPdgId, genMotherPdgId) < 2 ) continue;
 		// if ( jetP4->GetEntries() == 0 || jetP4->GetEntries() == 1) continue;
 		// make sure it is in the Z_pt range
 		// if (Z_pT_Range(jetP4 ,  Z_pT_Min,  Z_pT_Max) == kFALSE) continue;
