@@ -187,26 +187,41 @@ return count;
 
 Double_t Get_Acceptance_in_ZpT_Range(Double_t Z_pT_Min , Double_t Z_pT_Max)
 {
-	TFile *f =new TFile("../../nero.root","READ");
+   	TFile *f_TTJets = new TFile("~/cms/hist/TTJets.root") ;
+   	cout << "Found file TTJets.root" << endl;
+   	TFile *f_WJetsToLNu = new TFile("~/cms/hist/f_WJetsToLNu.root") ;
+   	cout << "Found file WJetsToLNu.root" << endl;
+   	TFile *f_ZZTo2Q2Nu = new TFile("~/cms/hist/ZZTo2Q2Nu.root") ;
+   	cout << "Found file ZZTo2Q2Nu.root" << endl;
+   	TFile *f_WZTo1L1Nu2Q = new TFile("~/cms/hist/WZTo1L1Nu2Q.root") ;
+   	cout << "Found file WZTo1L1Nu2Q.root" << endl ;
+   	TFile *f_WWToNuQQ = new TFile("~/cms/hist/WWToNuQQ.root") ;
+   	cout << "Found WWToNuQQ.root" << endl;
+   	
+	TFile *f =new TFile("~/cms/hist/ZZTo2Q2Nu.root","READ");
     TTree *tree = (TTree*)f->FindObjectAny("events");
     cout<< "Getting acceptance measurements in range "<<Z_pT_Min << " " << Z_pT_Max << endl;
-	
+
 	std::vector<Double_t> *jetMotherPdgId  = new std::vector<Double_t>;
 	std::vector<Double_t> *genPdgId = new std::vector<Double_t>;
 	std::vector<Double_t> *genMotherPdgId = new std::vector<Double_t>;
 	TClonesArray *jetP4 = new TClonesArray();
 	TClonesArray *genP4 = new TClonesArray();
-
 	tree->SetBranchAddress("jetMotherPdgId", &jetMotherPdgId) ;
+	cout << "Located Branch: jetMotherPdgId"<< endl;
 	tree->SetBranchAddress("genPdgId", &genPdgId) ;
+	cout << "Located Branch: genPdgId"<< endl;
 	tree->SetBranchAddress("genMotherPdgId", &genMotherPdgId) ;
+	cout << "Located Branch: genMotherPdgId"<< endl;
 	tree->SetBranchAddress("jetP4", &jetP4) ;
+	cout << "Located Branch: jetP4"<< endl;
 	tree->SetBranchAddress("genP4", &genP4) ;
+	cout << "Located Branch: gen_b_P4"<< endl;
 
 	//create variables to keep track of bquark acceptance ratio
 	Double_t total_gen_b = 0 ;
 	Double_t detector_acceptance_gen_b = 0 ;
-
+	cout << "Looping over nentries = " << tree->GetEntries() << endl;
 	for (int i = 0; i < tree->GetEntries(); ++i)
 	{
 		tree->GetEntry(i) ;
@@ -255,11 +270,15 @@ return ratio ;
 
 void Acceptance_function_Z_pT(Double_t Z_pt_bins[], int size)
 {
+
 	TH1F* h_acceptance_ratio = new TH1F("h_acceptance_ratio", "Acceptance of Z#Rightarrow b #bar{b}", size-1 , Z_pt_bins);
 	for (int i = 0; i < size-1; ++i)
 	{
+		Double_t acceptance = Get_Acceptance_in_ZpT_Range(Z_pt_bins[i] , Z_pt_bins[i+1]) ;
 		h_acceptance_ratio->SetBinContent( (i+1) ,  Get_Acceptance_in_ZpT_Range(Z_pt_bins[i] , Z_pt_bins[i+1]) );
+		cout << "Acceptance in range ( " << Z_pt_bins[i] << " , " << Z_pt_bins[i+1] << " ) = " << acceptance << endl ;
 	}
+	cout << "Finished setting contents of histogram" << endl;
 	h_acceptance_ratio->GetXaxis()->SetTitle("Z p_{#perp}");
 	h_acceptance_ratio->GetYaxis()->SetTitle("Acceptance");
 	TCanvas *c = new TCanvas();
@@ -301,7 +320,7 @@ std::vector< std::vector<Double_t> >  Function_of_Z_pt( TString btagger , Double
 
 	// TLorentzVector* jetp4 = dynamic_cast<TLorentzVector*> obj ;
 
-	TFile *f =new TFile("../../nero.root","READ");
+	TFile *f =new TFile("~/cms/hist/ZZTo2Q2Nu.root","READ");
     TTree *tree = (TTree*)f->FindObjectAny("events");
 	
 	std::vector<float> *var_btagger = new std::vector<float> ;	
@@ -408,7 +427,7 @@ std::vector< std::vector<Double_t> >  v_Eff_Fak_Pair( TString btagger , Double_t
 	std::vector<Double_t> *jetMotherPdgId  = new std::vector<Double_t>;
 	std::vector<float> *var_btagger = new std::vector<float> ;	
 
-	TFile *f =new TFile("../../nero.root","READ");
+	TFile *f =new TFile("~/cms/hist/ZZTo2Q2Nu.root","READ");
     TTree *tree = (TTree*)f->FindObjectAny("events");
 	
 	tree->SetBranchAddress(btagger, &var_btagger);
@@ -551,10 +570,303 @@ void Make_ROC_Curves_for_all_taggers(TString btagger_list[], Int_t size, Double_
 	c1->SaveAs(name+"3D.pdf");
 }
 
+Bool_t Two_Quarks(std::vector<Double_t> *genPdgId)
+{
+	Bool_t two_quarks;
+	int n_quarks = 0 ;
+	for (int i = 0; i < genPdgId->size(); ++i)
+	{
+		if (abs(genPdgId->at(i)) < 6)
+		{
+			n_quarks = n_quarks + 1 ;
+		}
+	}
+	if (n_quarks > 1)
+	{
+		two_quarks = kTRUE ;
+	}
+	else
+	{
+		two_quarks = kFALSE ;
+	}
+return two_quarks;
+}
+
+Bool_t Two_Jets(TClonesArray *jetP4)
+{
+	Bool_t two_jets;
+	int n_jets = jetP4->GetEntries() ;
+	if (n_jets > 1)
+	{
+		two_jets = kTRUE ;
+	}
+	else
+	{
+		two_jets = kFALSE ;
+	}
+return two_jets ;
+}
+
+Bool_t Two_matched_q_to_Z(std::vector<Double_t> *genPdgId, std::vector<Double_t> *genMotherPdgId)
+{
+	int count = 0 ;
+	for (int i = 0; i < genPdgId->size(); ++i)
+	{
+		if ( (abs(genPdgId->at(i)) < 6) && (genMotherPdgId->at(i)== 23))
+		{
+			count = count + 1;
+		}
+	}
+	Bool_t two_matches;
+	if (count == 2)
+	{
+		two_matches = kTRUE;
+	}
+	else
+	{
+		two_matches = kFALSE;
+		// cout << "Quarks matched to Z = " << count << endl;
+	}
+return two_matches;
+}
+
+// Get the Z pt from the reconstruction from gen level quarks
+std::vector<Double_t> Get_Z_Pt_2Q( std::vector<Double_t> *genMotherPdgId, std::vector<Double_t> *genPdgId , TClonesArray *genP4 )
+{
+	Double_t Z_pt = 0;
+	Double_t flavour = 0;
+	std::vector<Double_t> v_f_Zpt;
+	v_f_Zpt.push_back(0);
+	v_f_Zpt.push_back(0);
+	if ((Two_Quarks(genPdgId) == kFALSE)  || (Two_matched_q_to_Z(genPdgId, genMotherPdgId) == kFALSE) )
+	{
+		// cout << "Less than 2 quarks" << endl;
+		return v_f_Zpt;
+	}
+
+	int n_down = 0 ;
+	int n_up = 0 ;
+	int n_strange = 0 ;
+	int n_charm = 0 ;
+	int n_bottom = 0 ;
+
+	for (int i = 0; i < genMotherPdgId->size(); ++i)
+	{
+		//make sure that there are 2 quarks to reconstruct the Z from
+		// now search for what flavour the quark pairs are matched to the Z 
+		if (abs(genPdgId->at(i)) == 1 && genMotherPdgId->at(i) == 23) { n_down = n_down +1;}
+		if (abs(genPdgId->at(i)) == 2 && genMotherPdgId->at(i) == 23) { n_up = n_up +1;}
+		if (abs(genPdgId->at(i)) == 3 && genMotherPdgId->at(i) == 23) { n_strange = n_strange +1;}
+		if (abs(genPdgId->at(i)) == 4 && genMotherPdgId->at(i) == 23) { n_charm = n_charm +1;}
+		if (abs(genPdgId->at(i)) == 5 && genMotherPdgId->at(i) == 23) { n_bottom = n_bottom +1;}
+	}
+
+	// sanity check: make sure that we only have one flavour with size 2
+	int q_pair_to_Z = 0;
+	if (n_down > 1)	    { q_pair_to_Z = q_pair_to_Z+1 ; flavour = 1;}
+	if (n_up > 1)	    { q_pair_to_Z = q_pair_to_Z+1 ; flavour = 2;}
+	if (n_strange > 1)	{ q_pair_to_Z = q_pair_to_Z+1 ; flavour = 3;}
+	if (n_charm > 1)	{ q_pair_to_Z = q_pair_to_Z+1 ; flavour = 4;}
+	if (n_bottom > 1)	{ q_pair_to_Z = q_pair_to_Z+1 ; flavour = 5;}
+	if (q_pair_to_Z > 1) {cout << "!!!!!There are more than 1 pairs of quarks in the ZZ2Q2Nu sample!!!!" << endl ;}
+	// now that we have the flavour, we should look at what index the quarks are so we can get the P4
+	std::vector<int> matched_idex;
+
+	for (int i = 0; i < genMotherPdgId->size(); ++i)
+	{
+		if ( abs(genPdgId->at(i)) == flavour && genMotherPdgId->at(i) == 23 ) 
+		{
+			matched_idex.push_back(i) ;
+		}
+	}
+
+	if (matched_idex.size() < 2)
+	{
+		// cout << "Less than 2 quarks matched to Z. # matches = " << matched_idex.size() << endl;
+		return v_f_Zpt;
+	}
+	// SANITY CHECK: make sure that there are only 2 matched quarks
+	if (matched_idex.size() > 2) {cout << "!!! More than 2 quarks have been matched to the Z !!!" << endl ;}
+	// Assuming that we only have 2 matched quarks
+	TLorentzVector* quark1 = dynamic_cast<TLorentzVector*>(genP4->At(matched_idex.at(0))) ;
+	TLorentzVector* quark2 = dynamic_cast<TLorentzVector*>(genP4->At(matched_idex.at(1))) ;
+	matched_idex.clear();
+	TLorentzVector Z = *quark1 + *quark2 ;
+	Z_pt = Z.Pt();
+	v_f_Zpt.clear() ;
+	v_f_Zpt.push_back(flavour);
+	v_f_Zpt.push_back(Z_pt);
+
+return v_f_Zpt ;
+}
+
+// Plot the Z pt fromt the reconstruction from jets
+Double_t Get_Z_Pt_2J( TClonesArray* jetP4 )
+{
+	Double_t n_jets = jetP4->GetEntries() ;
+	Double_t mass = 0 ;
+	Double_t true_Z_mass = 91.1876 ;
+	Double_t Best_Z_mass = 0 ;
+	Double_t Z_pt = 0;
+	if ( Two_Jets(jetP4) == kFALSE ) {return Z_pt ;}
+
+	int i_best_jet_1 = 0 ;
+	int i_best_jet_2 = 0 ;
+
+	// cout << "n_jets = " << n_jets << endl;
+
+	for (int i = 0; i < n_jets; ++i)
+	{
+		TLorentzVector *jet1 = new TLorentzVector();
+		jet1 = dynamic_cast<TLorentzVector*>(jetP4->At(i)) ;
+		for (int j = i+1 ; j < n_jets; ++j)
+		{
+
+			TLorentzVector* jet2 = new TLorentzVector(); 
+			jet2= dynamic_cast<TLorentzVector*>(jetP4->At(j)) ;
+			TLorentzVector* Z = new TLorentzVector();
+			*Z = *jet1 + *jet2 ;
+			mass = Z->M() ;
+			// cout << " Z mass = " << mass << " for pair i = " << i << " j = " << j << endl ;
+			if ( abs(mass - true_Z_mass) < abs(Best_Z_mass - true_Z_mass) )
+			{
+				//this means that this is the best combination of jets that came from a Z
+				// store the indexes 
+				Best_Z_mass = mass ;
+				i_best_jet_1 = i ;
+				i_best_jet_2 = j ;
+			}
+			// cout << "Best Mass = " << Best_Z_mass<< " at i = " << i << " j = " << j << endl;
+		}
+	}
+	// cout << "Got best Z mass" << endl;
+
+	//now we should have the best Jets to reconstruct the Z from
+	TLorentzVector *best_jet1 = dynamic_cast<TLorentzVector*>(jetP4->At(i_best_jet_1)) ;
+	TLorentzVector *best_jet2 = dynamic_cast<TLorentzVector*>(jetP4->At(i_best_jet_2)) ;
+	TLorentzVector *Z = new TLorentzVector() ;
+	*Z = *best_jet1 + *best_jet2 ;
+	Z_pt = Z->Pt() ;
+
+return Z_pt ;
+}
+
+// Plot the Z_pt spectra
+void Z_pt_distribution()
+{
+	cout << "Getting the Z_pt distribution " << endl;
+	TFile *f =new TFile("~/cms/hist/ZZTo2Q2Nu.root","READ");
+    TTree *tree = (TTree*)f->FindObjectAny("events");
+    cout << "Found tree" << endl ;
+	std::vector<Double_t> *jetMotherPdgId  = new std::vector<Double_t>;
+	std::vector<Double_t> *genPdgId = new std::vector<Double_t>;
+	std::vector<Double_t> *genMotherPdgId = new std::vector<Double_t>;
+	TClonesArray *jetP4 = new TClonesArray();
+	TClonesArray *genP4 = new TClonesArray();
+	float mcWeight;
+	tree->SetBranchAddress("jetMotherPdgId", &jetMotherPdgId) ;
+	cout << "Located Branch: jetMotherPdgId"<< endl;
+	tree->SetBranchAddress("genPdgId", &genPdgId) ;
+	cout << "Located Branch: genPdgId"<< endl;
+	tree->SetBranchAddress("genMotherPdgId", &genMotherPdgId) ;
+	cout << "Located Branch: genMotherPdgId"<< endl;
+	tree->SetBranchAddress("jetP4", &jetP4) ;
+	cout << "Located Branch: jetP4"<< endl;
+	tree->SetBranchAddress("genP4", &genP4) ;
+	cout << "Located Branch: gen_b_P4"<< endl;
+	tree->SetBranchAddress("mcWeight",&mcWeight);
+	int nbins = 100 ; Double_t xmin = 0 ; Double_t xmax = 1000 ;
+	THStack* s_Z_pt_qq = new THStack("Z_pt_qq","Z p_{#perp}  from Z#rightarrow q #bar{q}");
+	TLegend* leg = new TLegend(0.7, 0.9, 0.90, 0.7);
+	TH1D* h_Z_dd = new TH1D("h_Z_dd", "Z P_{#perp} from Z#Rightarrow d#bar{d}", nbins, xmin, xmax) ;
+	TH1D* h_Z_uu = new TH1D("h_Z_uu", "Z P_{#perp} from Z#Rightarrow u#bar{u}", nbins, xmin, xmax) ;
+	TH1D* h_Z_ss = new TH1D("h_Z_ss", "Z P_{#perp} from Z#Rightarrow s#bar{s}", nbins, xmin, xmax) ;
+	TH1D* h_Z_cc = new TH1D("h_Z_cc", "Z P_{#perp} from Z#Rightarrow c#bar{c}", nbins, xmin, xmax) ;
+	TH1D* h_Z_bb = new TH1D("h_Z_bb", "Z P_{#perp} from Z#Rightarrow b#bar{b}", nbins, xmin, xmax) ;
+	TH1D* h_Z_JJ = new TH1D("h_Z_JJ", "Z p_{#perp}   reconstructed from Jets", nbins, xmin, xmax) ;
+	cout << "Looping over nentries = " << tree->GetEntries() << endl;
+	std::vector<Double_t> v_f_Zpt;
+	for (int i = 0; i < tree->GetEntries(); ++i)
+	{
+
+		tree->GetEntry(i) ;
+		//set the weights
+		if (mcWeight > 0) {mcWeight = 1;}else{mcWeight = -1;}
+		//get the reco Z info from gen quarks
+		v_f_Zpt = Get_Z_Pt_2Q( genMotherPdgId, genPdgId , genP4 );
+		Double_t flavour = v_f_Zpt.at(0) ;
+		Double_t Z_pt = v_f_Zpt.at(1) ;
+		// cout << flavour << " " << Z_pt << endl;
+		if ( flavour == 1 ) { h_Z_dd->Fill(Z_pt , mcWeight); }
+		if ( flavour == 2 ) { h_Z_uu->Fill(Z_pt , mcWeight); }
+		if ( flavour == 3 ) { h_Z_ss->Fill(Z_pt , mcWeight); }
+		if ( flavour == 4 ) { h_Z_cc->Fill(Z_pt , mcWeight); }
+		if ( flavour == 5 ) { h_Z_bb->Fill(Z_pt , mcWeight); }
+		//get the reco Z info from jets
+		h_Z_JJ->Fill( Get_Z_Pt_2J( jetP4 ) ,mcWeight);
+		// cout << Get_Z_Pt_2J( jetP4 ) << endl;
+		// v_f_Zpt.clear();
+
+	}
+	cout << "Finished looping" << endl;
+	h_Z_dd->SetFillColor(1);
+	h_Z_dd->SetMarkerStyle(21);
+	h_Z_dd->SetMarkerColor(1);
+	h_Z_uu->SetFillColor(2);
+	h_Z_uu->SetMarkerStyle(21);
+	h_Z_uu->SetMarkerColor(2);
+	h_Z_ss->SetFillColor(3);
+	h_Z_ss->SetMarkerStyle(21);
+	h_Z_ss->SetMarkerColor(3);
+	h_Z_cc->SetFillColor(4);
+	h_Z_cc->SetMarkerStyle(21);
+	h_Z_cc->SetMarkerColor(4);
+	h_Z_bb->SetFillColor(5);
+	h_Z_bb->SetMarkerStyle(21);
+	h_Z_bb->SetMarkerColor(5);
+	leg->AddEntry(h_Z_dd ,"Z#rightarrow d#bar{d}" , "lpf");
+	leg->AddEntry(h_Z_uu ,"Z#rightarrow u#bar{u}" , "lpf");
+	leg->AddEntry(h_Z_ss ,"Z#rightarrow s#bar{s}" , "lpf");
+	leg->AddEntry(h_Z_dd ,"Z#rightarrow c#bar{c}" , "lpf");
+	leg->AddEntry(h_Z_bb ,"Z#rightarrow b#bar{b}" , "lpf");
+	TCanvas* c = new TCanvas("Z_pt", "Z_pt" , 1000, 800);
+	s_Z_pt_qq->Add(h_Z_dd);
+	s_Z_pt_qq->Add(h_Z_uu);
+	s_Z_pt_qq->Add(h_Z_ss);
+	s_Z_pt_qq->Add(h_Z_cc);
+	s_Z_pt_qq->Add(h_Z_bb);
+	h_Z_JJ->SetMaximum( s_Z_pt_qq->GetMaximum() );
+	h_Z_JJ->SetMinimum( s_Z_pt_qq->GetMinimum() );
+	c->Divide(2,1) ;
+	
+	leg->SetHeader("Z #rightarrow q #bar{q}");
+	// TH1D* a_h_Z_pt[5] = {h_Z_dd, h_Z_uu, h_Z_ss, h_Z_cc, h_Z_bb};
+	// TString label[5] = {"Z#rightarrow d#bar{d}", "Z#rightarrow u#bar{u}", "Z#rightarrow s#bar{s}", "Z#rightarrow c#bar{c}", "Z#rightarrow b#bar{b}"};
+	// for (int i = 0; i < 5; ++i)
+	// {
+	// 	a_h_Z_pt[i]->SetLineColor(i+1);
+	// 	// a_h_Z_pt[i]->SetFillStyle();
+	// 	a_h_Z_pt[i]->SetFillColor(i+1);
+	// 	a_h_Z_pt[i]->SetMarkerStyle(21);
+	// 	a_h_Z_pt[i]->SetMarkerColor(i+1);
+	// 	leg->AddEntry(a_h_Z_pt[i] , label[i], "lpf");
+	// }
+
+	c->cd(1) ;
+	s_Z_pt_qq->Draw();
+	leg->Draw();
+	
+	c->cd(2);
+	h_Z_JJ->Draw();
+
+	c->SaveAs("Z_pt.png");
+	c->SaveAs("Z_pt.pdf");
+}
+
 void btagging_ef()
 {
 	Double_t n_coordinates = 11 ;
-	Double_t Z_pt_bins[4] = {0, 250, 500, 1000} ;
+	Double_t Z_pt_bins[3] = {0, 250, 500} ;
 	// Double_t Z_pt_bins[2] = {500, 1000} ;
 
 	Double_t size =  9 ;
@@ -572,12 +884,15 @@ void btagging_ef()
 							  } ;
 
 
-	// for (int i = 0; i < 3; ++i)
-	// {
-	// 	Make_ROC_Curves_for_all_taggers(btagger_list , size, n_coordinates, Z_pt_bins[i], Z_pt_bins[i+1]);
-	// }
-	Acceptance_function_Z_pT( Z_pt_bins,  4);
+	for (int i = 0; i < 3; ++i)
+	{
+		Make_ROC_Curves_for_all_taggers(btagger_list , size, n_coordinates, Z_pt_bins[i], Z_pt_bins[i+1]);
+	}
+	Acceptance_function_Z_pT( Z_pt_bins,  3);
+	Z_pt_distribution();
 } 
 
 
 
+// no lepton, look at MET dist and put cut, at least 2 jets
+// btag first and then reco Z mass and vice versa 
