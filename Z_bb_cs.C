@@ -73,14 +73,14 @@ Bool_t Two_Gen_b_Quarks_Matched_to_Z( std::vector<Double_t> *genPdgId , std::vec
 return two_gen_b_quarks_matched_to_Z;
 }
 
-THStack* Plot_Signal_and_Backgrounf(TH1D* h_sig , TH1D* h_bkg, TString variable )
+THStack* Plot_Signal_and_Background(TH1D* h_sig , TH1D* h_bkg, TString variable )
 {
 	THStack* s_sig_and_bkg = new THStack("h_sig_bkg_" + variable , variable) ;
 	TLegend* leg = new TLegend(0.7, 0.9, 0.90, 0.7) ;
 	h_sig->SetLineColor(kRed) ;
-	h_sig->SetFillColor(kRed) ;
+	// h_sig->SetFillColor(kRed) ;
 	h_bkg->SetLineColor(kBlue) ;
-	h_bkg->SetFillColor(kBlue) ;
+	// h_bkg->SetFillColor(kBlue) ;
 	leg->AddEntry(h_bkg, "Background" , "l") ;
 	leg->AddEntry(h_sig, "Signal" , "l") ;
 	TCanvas* c = new TCanvas() ; 
@@ -148,7 +148,6 @@ Double_t Get_dijet_mass( TClonesArray* jetP4 )
 		jet1 = dynamic_cast<TLorentzVector*>(jetP4->At(i)) ;
 		for (int j = i+1 ; j < n_jets; ++j)
 		{
-
 			TLorentzVector* jet2 = new TLorentzVector(); 
 			jet2= dynamic_cast<TLorentzVector*>(jetP4->At(j)) ;
 			TLorentzVector* Z = new TLorentzVector();
@@ -179,6 +178,171 @@ return Z_mass ;
 }
 
 
+void Signal_Z_bb_jets(std::vector<TTree*> *v_trees)
+{
+	cout << "Understanding the signal region" << endl ;
+	TTree* tree = new TTree();
+
+	// Make histograms to store the signal and backgrounds regions
+	// Int_t nbins = 9 ; Double_t xmin = 0 ; Double_t xmax = 10 ;
+	TH1D* h_bb_eta = new TH1D("h_bb_eta", "h_bb_eta", 16, -4, 4);
+	TH1D* h_jets_eta = new TH1D("h_jets_eta", "h_jets_eta", 16, -4, 4);
+	// TH1D* h_bb_delta_eta = new TH1D("h_bb_delta_eta", "h_bb_delta_eta", nbins, xmin, xmax);
+	// TH1D* h_jets_delta_eta = new TH1D("h_jets_delta_eta", "h_jets_delta_eta", nbins, xmin, xmax);
+	TH1D* h_bb_pt = new TH1D("h_bb_pt", "h_bb_pt", 100, 0, 1000) ;
+	TH1D* h_jets_pt = new TH1D("h_jets_pt", "h_jets_pt", 100, 0, 1000) ;
+
+	TH2D* h_bb_eta_phi = new TH2D("h_bb_eta_phi", "h_bb_eta_phi", 40, -180, 180,  16, 4 , 4 ) ;
+	TH2D* h_jet_eta_phi = new TH2D("h_jet_eta_phi", "h_jet_eta_phi",  40, -180, 180,  16, 4 , 4) ;
+
+	TH1D* h_dRsquared = new TH1D("h_dRsquared", "h_dRsquared", 20, 0, 1 ) ;
+
+	// loop over the trees
+	for (int i = 0; i < v_trees->size(); ++i)
+		{
+			tree = v_trees->at(i) ;	
+
+			std::vector<Double_t> *jetMotherPdgId  = new std::vector<Double_t>;
+			std::vector<Double_t> *genPdgId = new std::vector<Double_t>;
+			std::vector<Double_t> *genMotherPdgId = new std::vector<Double_t>;
+			TClonesArray *jetP4 = new TClonesArray() ;
+			TClonesArray *genP4 = new TClonesArray() ; 
+			TClonesArray *metP4 = new TClonesArray() ;
+			float mcWeight;
+
+			tree->SetBranchAddress("jetMotherPdgId", &jetMotherPdgId) ;
+			cout << "Located Branch: jetMotherPdgId"<< endl ;
+			tree->SetBranchAddress("genPdgId", &genPdgId) ;
+			cout << "Located Branch: genPdgId"<< endl ;
+			tree->SetBranchAddress("genMotherPdgId", &genMotherPdgId) ;
+			cout << "Located Branch: genMotherPdgId"<< endl ;
+			tree->SetBranchAddress("jetP4", &jetP4) ;
+			cout << "Located Branch: jetP4"<< endl ;
+			tree->SetBranchAddress("genP4", &genP4) ;
+			cout << "Located Branch: gen_b_P4"<< endl;
+			tree->SetBranchAddress("mcWeight",&mcWeight) ;
+			cout << "Located Branch: mcWeight" << endl ;
+			tree->SetBranchAddress("metP4", &metP4) ;
+			cout << "Located Branch: metP4" << endl ;
+			
+			// Decrease the number of entries for testing to 0.05%
+			Double_t nentries = tree->GetEntries() ;
+			nentries = nentries*0.2 ;
+			// determine the min jet pt 
+			Double_t lowest_jetpt = 500 ;
+			for (int j = 0; j < nentries; ++j)
+			{
+				tree->GetEntry(j) ;
+				if (mcWeight > 0) {mcWeight = 1;}else{mcWeight = -1;}
+				if (jetP4->GetEntries() != 1) continue;
+				TLorentzVector *jet = new TLorentzVector();
+				jet = dynamic_cast<TLorentzVector*>(jetP4->At(0)) ;
+				if (jet->Pt() < lowest_jetpt)
+				{
+					lowest_jetpt = jet->Pt() ;
+				} 
+			}
+			cout << "Lowest jet Pt = " << lowest_jetpt << endl;
+			cout << "Looping over " << nentries << " events in dataset " << i << endl ;
+			for (int j = 0; j < nentries; ++j)
+			{
+				tree->GetEntry(j) ;
+				if (mcWeight > 0) {mcWeight = 1;}else{mcWeight = -1;}
+			
+				// Check to see if there are 2 b quarks that are matched to a Z
+				if (Two_Gen_b_Quarks_Matched_to_Z( genPdgId , genMotherPdgId ) == kFALSE) continue ;
+				// look for signal with 1 jet
+				if (jetP4->GetEntries() != 1) continue;
+				//apply cut to b
+				std::vector<int>* v_matched_b_to_Z = new std::vector<int> ;
+				for (int k = 0; k < genPdgId->size(); ++k)
+				{
+					if ((abs(genPdgId->at(k)) == 5) && (genMotherPdgId->at(k) == 23)) // it is a b matched to a Z so plot as signal
+					{
+						v_matched_b_to_Z->push_back(k) ;
+						//get the 4 vector
+						TLorentzVector *genb = new TLorentzVector();
+						genb = dynamic_cast<TLorentzVector*>(genP4->At(k)) ;
+						// add pt cut to the gen b
+						if ( genb->Pt() < 30 ) continue ;
+						h_bb_pt->Fill(genb->Pt() , mcWeight);
+						h_bb_eta->Fill(genb->Eta() , mcWeight);
+						h_bb_eta_phi->Fill( genb->Phi() , genb->Eta() , mcWeight );
+					}
+				}
+				// since the jet vector should only be of size 1 we can select that jet
+				TLorentzVector *jet = new TLorentzVector();
+				jet = dynamic_cast<TLorentzVector*>(jetP4->At(0)) ;
+				h_jets_eta->Fill(jet->Eta(), mcWeight) ;
+				h_jets_pt->Fill(jet->Pt(), mcWeight) ;
+				h_jet_eta_phi->Fill(jet->Phi() , jet->Eta() , mcWeight) ;
+
+				// Get info for dRsquared
+				TLorentzVector *genb1 = new TLorentzVector();
+				genb1 = dynamic_cast<TLorentzVector*>(genP4->At(v_matched_b_to_Z->at(0))) ;
+				TLorentzVector *genb2 = new TLorentzVector();
+				genb2 = dynamic_cast<TLorentzVector*>(genP4->At(v_matched_b_to_Z->at(1))) ;
+				if (( genb1->Pt() < lowest_jetpt ) || (genb2->Pt() < lowest_jetpt)) continue ;
+				Double_t dRsquared = 0 ;
+				dRsquared =  pow(genb1->Phi() - genb2->Phi(), 2) + pow(genb1->Eta() - genb2->Eta() , 2) ;
+				h_dRsquared->Fill(dRsquared,mcWeight) ;
+				v_matched_b_to_Z->clear() ;
+
+			}
+		}
+
+		h_bb_eta->SetLineColor(kRed);
+		h_jets_eta->SetLineColor(kBlue);
+		TLegend* leg1 = new TLegend(0.7, 0.9, 0.90, 0.7) ;
+		leg1->AddEntry(h_bb_eta, "b quarks", "l") ;
+		leg1->AddEntry(h_jets_eta, "Jets" , "l") ;
+		
+		h_bb_pt->SetLineColor(kRed);
+		h_jets_pt->SetLineColor(kBlue);
+		TLegend* leg2 = new TLegend(0.7, 0.9, 0.90, 0.7) ;
+		leg2->AddEntry(h_bb_pt, "b quarks", "l") ;
+		leg2->AddEntry(h_jets_pt, "Jet" , "l") ;
+
+		h_bb_eta_phi->SetLineColor(kRed) ;
+		h_jet_eta_phi->SetLineColor(kBlue) ;
+		TLegend* leg3 = new TLegend(0.7, 0.9, 0.90, 0.7) ;
+		leg3->AddEntry(h_bb_eta_phi, "b quarks", "l") ;
+		leg3->AddEntry(h_jet_eta_phi, "Jet" , "l") ;
+
+		TCanvas* c = new TCanvas() ;
+		c->Divide(2,3) ;
+		
+		c->cd(1);
+		h_bb_eta->Draw("hist");
+		h_jets_eta->Draw("same hist");
+		leg1->Draw() ;
+		
+		c->cd(2) ;
+		h_bb_pt->Draw("hist");
+		h_jets_pt->Draw("same, hist");
+		leg2->Draw() ;
+
+		c->cd(3) ;
+		h_bb_eta_phi->Draw("PSR SURF1") ;
+		leg3->Draw() ;
+
+		c->cd(4) ;
+		h_dRsquared->Draw("hist");
+
+		c->cd(5) ;
+
+
+		c->cd(6) ;
+		h_jet_eta_phi->Draw("CONTZ") ;
+
+		c->SaveAs("Signal_bb_jets.png") ;
+
+		TCanvas* c2 = new TCanvas() ;
+		h_dRsquared->Draw("hist");
+		c2->SaveAs("dRsquared.png") ;
+
+}
+
 
 Double_t Get_Cut_Parameters(std::vector<TTree*> *v_trees , TString variable , Int_t nbins , Double_t xmin , Double_t xmax)
 {
@@ -189,8 +353,6 @@ Double_t Get_Cut_Parameters(std::vector<TTree*> *v_trees , TString variable , In
 	// Int_t nbins = 9 ; Double_t xmin = 0 ; Double_t xmax = 10 ;
 	TH1D* h_sig = new TH1D("h_sig", "h_sig", nbins, xmin, xmax);
 	TH1D* h_bkg = new TH1D("h_bkg", "h_bkg", nbins, xmin, xmax);
-
-
 
 	// loop over the trees
 	for (int i = 0; i < v_trees->size(); ++i)
@@ -222,12 +384,12 @@ Double_t Get_Cut_Parameters(std::vector<TTree*> *v_trees , TString variable , In
 			
 			Double_t nentries = tree->GetEntries() ;
 			// Decrease the number of entries for testing to 0.05%
-			nentries = nentries * 0.05 ;
+			nentries = nentries*0.01 ;
 			cout << "Looping over " << nentries << " events in dataset " << i << endl ;
 			for (int j = 0; j < nentries; ++j)
 			{
+				Double_t x = 0 ;
 				tree->GetEntry(j) ;
-				int x = 0 ;
 				if      ( variable == "njets") {	x = jetP4->GetEntries() ;}
 				else if ( variable == "met")   { TLorentzVector* MetP4 = dynamic_cast<TLorentzVector*>(metP4->At(0)) ;    x = MetP4->Pt() ;}  
 				else {cout << " !!! Incorrect choice of variable !!!" << endl;}
@@ -237,12 +399,14 @@ Double_t Get_Cut_Parameters(std::vector<TTree*> *v_trees , TString variable , In
 				if (Two_Gen_b_Quarks_Matched_to_Z( genPdgId , genMotherPdgId ) == kTRUE)
 				{
 					//fill the signal histogram
-					h_sig->Fill( Get_dijet_mass(jetP4) , mcWeight ) ;
+					// h_sig->Fill( Get_dijet_mass(jetP4) , mcWeight ) ;
+					h_sig->Fill( x , mcWeight ) ;
 				}
-				else
+				else 
 				{
 					// fill the background histogram
-					h_bkg->Fill( Get_dijet_mass(jetP4) , mcWeight ) ;
+					// h_bkg->Fill( Get_dijet_mass(jetP4) , mcWeight ) ;
+					h_bkg->Fill( x , mcWeight ) ;
 				}
 			}
 		}
@@ -251,7 +415,7 @@ Double_t Get_Cut_Parameters(std::vector<TTree*> *v_trees , TString variable , In
 		Double_t bkg_integral = 0 ; 
 		sig_integral = h_sig->Integral(); cout << "Signal Integral = " << sig_integral << " Signal Entries = " << h_sig->GetEntries() << endl ;
 		bkg_integral = h_bkg->Integral(); cout << "Background Integral = " << bkg_integral <<  " Background Entries = " << h_bkg->GetEntries() <<  endl ;
-		THStack* s_sig_and_bkg_njets =  Plot_Signal_and_Backgrounf( h_sig , h_bkg, variable ) ;
+		THStack* s_sig_and_bkg_njets =  Plot_Signal_and_Background( h_sig , h_bkg, variable ) ;
 return 0 ;
 }
 
@@ -323,10 +487,14 @@ void Minimize_Sensitivity( std::vector<TTree*> *v_trees,
 					tree->SetBranchAddress("mcWeight",&mcWeight) ;
 					tree->SetBranchAddress("metP4", &metP4) ;
 					Double_t nentries = tree->GetEntries() ;
-					nentries = nentries;
+					nentries = nentries*0.1;
 					for (int j = 0; j < nentries; ++j)
 					{
 						tree->GetEntry(j) ;
+						if (j%10000 == 0)
+						{
+							cout << "10000 events" << endl;
+						}
 						int x = 0 ;
 						// Apply cuts
 						Int_t njets = 0; Double_t met = 0 ;
@@ -416,13 +584,15 @@ void Z_bb_cs()
    	// Double_t met_cut = Get_Cut_Parameters(v_trees , "met" , 100, 0, 1000) ;
 
    	// information on each cut should be packed in the form Name,Min,Max,Increments
-   	std::vector<TString>  *v_cut_names = new std::vector<TString> ; v_cut_names->push_back("njets") ; v_cut_names->push_back("met") ;
-   	std::vector<Double_t> *v_cut_min = new std::vector<Double_t> ;
-   	std::vector<Double_t> *v_cut_max = new std::vector<Double_t> ;
-   	std::vector<Int_t> *v_cut_increments = new std::vector<Int_t> ;
-   	v_cut_names->push_back("njets") ;  v_cut_min->push_back(0) ; v_cut_max->push_back(10) ; v_cut_increments->push_back(10) ;
-   	v_cut_names->push_back("met") ;  v_cut_min->push_back(0) ;  v_cut_max->push_back(1000); v_cut_increments->push_back(20) ;
+   	// std::vector<TString>  *v_cut_names = new std::vector<TString> ; v_cut_names->push_back("njets") ; v_cut_names->push_back("met") ;
+   	// std::vector<Double_t> *v_cut_min = new std::vector<Double_t> ;
+   	// std::vector<Double_t> *v_cut_max = new std::vector<Double_t> ;
+   	// std::vector<Int_t> *v_cut_increments = new std::vector<Int_t> ;
+   	// v_cut_names->push_back("njets") ;  v_cut_min->push_back(0) ; v_cut_max->push_back(10) ; v_cut_increments->push_back(10) ;
+   	// v_cut_names->push_back("met") ;  v_cut_min->push_back(0) ;  v_cut_max->push_back(1000); v_cut_increments->push_back(20) ;
 
-   	Minimize_Sensitivity(v_trees, v_cut_names, v_cut_min, v_cut_max , v_cut_increments) ;
+   	//Minimize_Sensitivity(v_trees, v_cut_names, v_cut_min, v_cut_max , v_cut_increments) ;
+
+	Signal_Z_bb_jets(v_trees);
 
 }
