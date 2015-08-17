@@ -34,20 +34,27 @@
 #include "TLorentzVector.h"
 #include "TAttText.h"
 #include "TClonesArray.h"
+#include "TGraphAsymmErrors.h"
 #include <math.h>
 // #include "../../NeroProducer/Core/interface/BareJets.hpp"
 
 using namespace std;
 
-Bool_t Two_Gen_b_Quarks_Matched_to_Z( std::vector<Double_t> *genPdgId , std::vector<Double_t> *genMotherPdgId )
+Bool_t Two_Gen_b_Quarks_Matched_to_Z( std::vector<Double_t> *genPdgId , std::vector<Double_t> *genMotherPdgId  , TClonesArray *genP4 , Double_t b_pt_cut)
 {
 	Bool_t two_gen_b_quarks_matched_to_Z ;
 	int n_b_matched_to_Z = 0 ;
 	// Count how many matches you get
-	for (int i = 0; i < genPdgId->size(); ++i)
+	for (unsigned int i = 0; i < genPdgId->size(); ++i)
 	{
+		cout << i <<" : genPdgId = " << genPdgId->at(i) << " and genMotherPdgId = " << genMotherPdgId->at(i) << endl ;
 		if ((abs(genPdgId->at(i))==5) && ( genMotherPdgId->at(i) == 23 ))
 		{
+			TLorentzVector* genbP4 = dynamic_cast<TLorentzVector*> (genP4->At(i));
+			if (b_pt_cut != 0)
+			{
+				if (genbP4->Pt() < b_pt_cut) continue ;
+			}
 			n_b_matched_to_Z = n_b_matched_to_Z + 1 ;
 		}
 	}
@@ -177,6 +184,56 @@ Double_t Get_dijet_mass( TClonesArray* jetP4 )
 return Z_mass ;
 }
 
+// Used to get the Z pt from gen level. this in this case from two b's
+Double_t Get_Z_pT_gen_level( std::vector<Double_t> *genPdgId , std::vector<Double_t> *genMotherPdgId , TClonesArray* genP4 )
+{
+	// loop through and find what index of the b matched to the Z
+	std::vector<Int_t> *v_matched_b_to_Z = new std::vector<Int_t> ;
+	for (unsigned int i = 0; i < genPdgId->size(); ++i)
+	{
+		if( (abs(genPdgId->at(i)) == 5 ) && (genMotherPdgId->at(i) == 23))
+		{
+			v_matched_b_to_Z->push_back(i);
+		}
+	}
+	// now that we have the b's that came from a Z we can reconstruct them to get the Z
+	if (v_matched_b_to_Z->size() > 2) 
+	{
+		cout << "More than 2 b's matched to a Z !!!! Something is wrong" << endl ;
+	}
+	//now we should have the b's to reconstruct the Z from
+	TLorentzVector *genb1 = dynamic_cast<TLorentzVector*>(genP4->At(v_matched_b_to_Z->at(0))) ;
+	TLorentzVector *genb2 = dynamic_cast<TLorentzVector*>(genP4->At(v_matched_b_to_Z->at(1))) ;
+	TLorentzVector *Z = new TLorentzVector() ;
+	*Z = *genb1 + *genb2 ;
+	Double_t Z_Pt = Z->Pt() ;
+
+return Z_Pt ;
+}
+
+Double_t Get_dR_between_bs( std::vector<Double_t> *genPdgId , std::vector<Double_t> *genMotherPdgId , TClonesArray* genP4)
+{
+	// loop through and find what index of the b matched to the Z
+	std::vector<Int_t> *v_matched_b_to_Z = new std::vector<Int_t> ;
+	for (unsigned int i = 0; i < genPdgId->size(); ++i)
+	{
+		if( (abs(genPdgId->at(i)) == 5 ) && (genMotherPdgId->at(i) == 23))
+		{
+			v_matched_b_to_Z->push_back(i);
+		}
+	}
+	// now that we have the b's that came from a Z we ca take the dR from them
+	if (v_matched_b_to_Z->size() > 2) 
+	{
+		cout << "More than 2 b's matched to a Z !!!! Something is wrong" << endl ;
+	}
+	TLorentzVector *genb1 = dynamic_cast<TLorentzVector*>(genP4->At(v_matched_b_to_Z->at(0))) ;
+	TLorentzVector *genb2 = dynamic_cast<TLorentzVector*>(genP4->At(v_matched_b_to_Z->at(1))) ;
+	Double_t dR = 0 ;
+	dR = genb1->DrEtaPhi(*genb2) ;
+return dR ;
+}
+
 
 void Signal_Z_bb_jets(std::vector<TTree*> *v_trees)
 {
@@ -198,7 +255,7 @@ void Signal_Z_bb_jets(std::vector<TTree*> *v_trees)
 	TH1D* h_dRsquared = new TH1D("h_dRsquared", "h_dRsquared", 20, 0, 1 ) ;
 
 	// loop over the trees
-	for (int i = 0; i < v_trees->size(); ++i)
+	for (unsigned int i = 0; i < v_trees->size(); ++i)
 		{
 			tree = v_trees->at(i) ;	
 
@@ -250,12 +307,12 @@ void Signal_Z_bb_jets(std::vector<TTree*> *v_trees)
 				if (mcWeight > 0) {mcWeight = 1;}else{mcWeight = -1;}
 			
 				// Check to see if there are 2 b quarks that are matched to a Z
-				if (Two_Gen_b_Quarks_Matched_to_Z( genPdgId , genMotherPdgId ) == kFALSE) continue ;
+				if (Two_Gen_b_Quarks_Matched_to_Z( genPdgId , genMotherPdgId , genP4 , 0) == kFALSE) continue ;
 				// look for signal with 1 jet
 				if (jetP4->GetEntries() != 1) continue;
 				//apply cut to b
 				std::vector<int>* v_matched_b_to_Z = new std::vector<int> ;
-				for (int k = 0; k < genPdgId->size(); ++k)
+				for (unsigned int k = 0; k < genPdgId->size(); ++k)
 				{
 					if ((abs(genPdgId->at(k)) == 5) && (genMotherPdgId->at(k) == 23)) // it is a b matched to a Z so plot as signal
 					{
@@ -343,6 +400,34 @@ void Signal_Z_bb_jets(std::vector<TTree*> *v_trees)
 
 }
 
+Bool_t Gen_b_from_Z_cut( std::vector<Double_t> *genPdgId ,std::vector<Double_t> *genMotherPdgId , TClonesArray *genP4 ) 
+{
+	Bool_t passed_cut = kFALSE;
+	Int_t count = 0 ;
+	// make sure the b is matched to a Z
+	for (unsigned int i = 0; i < genPdgId->size(); ++i)
+	{
+		if (( abs(genPdgId->at(i)) == 5 ) && (genMotherPdgId->at(i) == 23 ))
+		{
+			TLorentzVector* genb = dynamic_cast<TLorentzVector*> (genP4->At(i)) ;
+			// place the pt cut on the b's
+			if ( genb->Pt() < 30 ) continue ;
+			// Place the Eta cut on the b's
+			if (abs(genb->Eta()) < 2.4) continue ;
+			count = count + 1 ;
+		}
+	}
+	if (count == 2) 
+	{
+		passed_cut = kTRUE ;
+	}
+	else
+	{
+		passed_cut = kFALSE ;
+	}
+return passed_cut ;
+}
+
 
 Double_t Get_Cut_Parameters(std::vector<TTree*> *v_trees , TString variable , Int_t nbins , Double_t xmin , Double_t xmax)
 {
@@ -355,7 +440,7 @@ Double_t Get_Cut_Parameters(std::vector<TTree*> *v_trees , TString variable , In
 	TH1D* h_bkg = new TH1D("h_bkg", "h_bkg", nbins, xmin, xmax);
 
 	// loop over the trees
-	for (int i = 0; i < v_trees->size(); ++i)
+	for (unsigned int i = 0; i < v_trees->size(); ++i)
 		{
 			tree = v_trees->at(i) ;	
 
@@ -390,22 +475,37 @@ Double_t Get_Cut_Parameters(std::vector<TTree*> *v_trees , TString variable , In
 			{
 				Double_t x = 0 ;
 				tree->GetEntry(j) ;
-				if      ( variable == "njets") {	x = jetP4->GetEntries() ;}
+				if      ( variable == "njets") 
+				{	
+					Int_t njets = jetP4->GetEntries() ;
+					// loop over jets and determine how many of them are within the eta range
+					for (int i = 0; i < njets; ++i)
+					{
+						TLorentzVector* jet = dynamic_cast<TLorentzVector*> ( jetP4->At(i) ) ;
+						if ( abs(jet->Eta()) < 2.4 )
+						{
+							x = x+1 ;
+						}
+					}
+				}
 				else if ( variable == "met")   { TLorentzVector* MetP4 = dynamic_cast<TLorentzVector*>(metP4->At(0)) ;    x = MetP4->Pt() ;}  
 				else {cout << " !!! Incorrect choice of variable !!!" << endl;}
 				// cout << variable << " = " << x << endl ;
 				if (mcWeight > 0) {mcWeight = 1;}else{mcWeight = -1;}
+
 				// Check to see if there are 2 b quarks that are matched to a Z
-				if (Two_Gen_b_Quarks_Matched_to_Z( genPdgId , genMotherPdgId ) == kTRUE)
+				if (Two_Gen_b_Quarks_Matched_to_Z( genPdgId , genMotherPdgId , genP4 , 0) == kTRUE)
 				{
 					//fill the signal histogram
 					// h_sig->Fill( Get_dijet_mass(jetP4) , mcWeight ) ;
+					if ( Gen_b_from_Z_cut( genPdgId , genMotherPdgId , genP4 ) == kFALSE ) continue ;
 					h_sig->Fill( x , mcWeight ) ;
 				}
 				else 
 				{
 					// fill the background histogram
 					// h_bkg->Fill( Get_dijet_mass(jetP4) , mcWeight ) ;
+					if ( Gen_b_from_Z_cut( genPdgId , genMotherPdgId , genP4 ) == kFALSE ) continue ;
 					h_bkg->Fill( x , mcWeight ) ;
 				}
 			}
@@ -467,7 +567,7 @@ void Minimize_Sensitivity( std::vector<TTree*> *v_trees,
 			TTree* tree = new TTree();
 
 			// loop over the trees
-			for (int i = 0; i < v_trees->size(); ++i)
+			for (unsigned int i = 0; i < v_trees->size(); ++i)
 				{
 					tree = v_trees->at(i) ;	
 
@@ -505,7 +605,7 @@ void Minimize_Sensitivity( std::vector<TTree*> *v_trees,
 						if (!(met >= cut2 )) continue ;
 						if (mcWeight > 0) {mcWeight = 1;}else{mcWeight = -1;}
 						// Check to see if there are 2 b quarks that are matched to a Z
-						if (Two_Gen_b_Quarks_Matched_to_Z( genPdgId , genMotherPdgId ) == kTRUE) 
+						if (Two_Gen_b_Quarks_Matched_to_Z( genPdgId , genMotherPdgId , genP4 , 0 ) == kTRUE) 
 						{
 							//fill the signal histogram
 							h_sig_dijet_mass->Fill( Get_dijet_mass(jetP4) , mcWeight ) ;
@@ -554,17 +654,758 @@ void Minimize_Sensitivity( std::vector<TTree*> *v_trees,
 	c4->SaveAs("surface4.pdf") ;
 }
 
+
+
+
+
+// Use dR to determine if the jets are matching to the b's that came from the Z
+Int_t Get_n_jets_matched_to_gen_b_from_Z( std::vector<Double_t>* genPdgId , std::vector<Double_t>* genMotherPdgId , TClonesArray* genP4 , TClonesArray* jetP4 )
+{
+	Int_t n_jets_matched_to_b_from_Z = 0 ;
+	// Start with a jet
+	std::vector<Int_t> *b_index = new std::vector<Int_t> ;
+	// start looping through the jets
+	for (int i = 0; i < jetP4->GetEntries(); ++i)
+	{
+		TLorentzVector* jet = dynamic_cast<TLorentzVector*> ( jetP4->At(i) ) ;
+		// now loop through the b's from Z and determine which is within dR
+		for (unsigned int j = 0; j < genPdgId->size(); ++j)
+		{
+			if ((abs(genPdgId->at(j)) == 5) && (genMotherPdgId->at(j) == 23))
+			{
+				TLorentzVector* genb = dynamic_cast<TLorentzVector*> (genP4->At(j)) ;
+				// calclate the dR squared with this jet and a b quark
+				Double_t dRsquared = 0 ;
+				dRsquared = pow( genb->Eta() - jet->Eta()  ,2) + pow( genb->Phi() - jet->Phi()  , 2) ;
+				// check if dRsquared > 0.3^2
+				if (dRsquared > pow(0.3,2) ) continue ;
+				// Make sure it is not claimed already
+				if (b_index->size() == 0) // then it is the first b so we are safe to match it
+				{
+					b_index->push_back(j) ;
+				}
+				else
+				{
+					// loop thorugh the vector and make sure the b quark was not cliamed already by another jet
+					for (unsigned int k = 0; k < b_index->size(); ++k)
+					{
+						if (  j != b_index->at(k) )
+						{
+							b_index->push_back(j) ;
+						}
+					}
+				}
+			}
+		}
+	}	
+
+	n_jets_matched_to_b_from_Z = b_index->size() ;
+	b_index->clear() ;
+
+return n_jets_matched_to_b_from_Z;
+}
+
+
+
+void N_jets_and_Zbb(std::vector<TTree*> *v_trees )
+{
+	cout << "Looking at how njets varies with Zpt" << endl ;
+	TTree* tree = new TTree();
+
+	// Make histograms to store the signal and backgrounds regions
+	// Int_t nbins = 9 ; Double_t xmin = 0 ; Double_t xmax = 10 ;
+	TH2D* h_nbjets_Z_pt = new TH2D( "h_nbjets_Z_pt" , "h_nbjets_Z_pt" , 20, 0, 1000, 5, 0, 5 );
+
+	// loop over the trees
+	for (unsigned int i = 0; i < v_trees->size(); ++i)
+		{
+			tree = v_trees->at(i) ;	
+
+			std::vector<Double_t> *jetMotherPdgId  = new std::vector<Double_t>;
+			std::vector<Double_t> *genPdgId = new std::vector<Double_t>;
+			std::vector<Double_t> *genMotherPdgId = new std::vector<Double_t>;
+			TClonesArray *jetP4 = new TClonesArray() ;
+			TClonesArray *genP4 = new TClonesArray() ; 
+			TClonesArray *metP4 = new TClonesArray() ;
+			float mcWeight;
+
+			tree->SetBranchAddress("jetMotherPdgId", &jetMotherPdgId) ;
+			cout << "Located Branch: jetMotherPdgId"<< endl ;
+			tree->SetBranchAddress("genPdgId", &genPdgId) ;
+			cout << "Located Branch: genPdgId"<< endl ;
+			tree->SetBranchAddress("genMotherPdgId", &genMotherPdgId) ;
+			cout << "Located Branch: genMotherPdgId"<< endl ;
+			tree->SetBranchAddress("jetP4", &jetP4) ;
+			cout << "Located Branch: jetP4"<< endl ;
+			tree->SetBranchAddress("genP4", &genP4) ;
+			cout << "Located Branch: gen_b_P4"<< endl;
+			tree->SetBranchAddress("mcWeight",&mcWeight) ;
+			cout << "Located Branch: mcWeight" << endl ;
+			tree->SetBranchAddress("metP4", &metP4) ;
+			cout << "Located Branch: metP4" << endl ;
+			
+			Double_t nentries = tree->GetEntries() ;
+			// Decrease the number of entries for testing to 0.05%
+			nentries = nentries ;
+			cout << "Looping over " << nentries << " events in dataset " << i << endl ;
+			for (int j = 0; j < nentries; ++j)
+			{
+				Double_t x = 0 ;
+				tree->GetEntry(j) ;
+				if (mcWeight > 0) {mcWeight = 1;}else{mcWeight = -1;}
+				// Variable to keep track of jets that are matched to b's that come from Z's
+				Int_t n_jets_matched_to_b_from_Z = 0 ;
+				// make sure the event is signal i.e Z->bb
+				if (Two_Gen_b_Quarks_Matched_to_Z( genPdgId , genMotherPdgId , genP4 , 0) == kFALSE) continue ;
+				// Figure out the Z_pt 
+				Double_t Z_pt = Get_Z_pT_gen_level(genPdgId , genMotherPdgId ,  genP4 ) ;
+				// now figure out how many jets were matched to a b 
+				// since this is signal we should ideally have 2 but we are seeing cases where we get 1
+				n_jets_matched_to_b_from_Z = Get_n_jets_matched_to_gen_b_from_Z( genPdgId , genMotherPdgId , genP4 , jetP4 ) ;
+				// Fill my 2D histogram
+				h_nbjets_Z_pt->Fill( Z_pt , n_jets_matched_to_b_from_Z  , mcWeight) ;
+			}
+		}
+	h_nbjets_Z_pt->SetStats(0) ;
+	TCanvas* c3 = new TCanvas() ;
+	c3->Divide(2,1) ;
+	c3->cd(1);
+	h_nbjets_Z_pt->Draw("LEGO") ;
+	c3->cd(2);
+	h_nbjets_Z_pt->Draw("COLZ") ;
+	c3->SaveAs("h_nbjets_Z_pt.png") ;
+
+}
+
+Int_t Get_n_b_in_fidacc( std::vector<Double_t>* genPdgId , std::vector<Double_t>* genMotherPdgId , TClonesArray* genP4 )
+{
+	Int_t n_b_from_Z_in_fidacc = 0 ;
+	// start looping through the b's matched to the Z's
+	for (unsigned int i = 0; i < genPdgId->size() ; ++i)
+	{
+		if (!((abs(genPdgId->at(i))==5) && (genMotherPdgId->at(i) == 23))) continue ;
+		TLorentzVector* genb = dynamic_cast<TLorentzVector*> (genP4->At(i)) ;
+		cout << "Gen b from Z with eta = " << genb->Eta() << "; " ;
+		if (abs(genb->Eta())<2.5) 
+		{
+			n_b_from_Z_in_fidacc = n_b_from_Z_in_fidacc + 1 ;
+		}
+		cout << "  " << endl ;
+	}	
+
+return n_b_from_Z_in_fidacc;
+}
+
+std::vector<Double_t>* Get_n_jets_matched_to_gen_b_from_Z_in_fidacc( std::vector<Double_t>* genPdgId , std::vector<Double_t>* genMotherPdgId , TClonesArray* genP4 , TClonesArray* jetP4 )
+{
+	std::vector<Double_t>* v_njets_btag_value = new std::vector<Double_t> ;
+	Double_t n_jets_matched_to_b_from_Z_in_fidacc = 0 ;
+	// Start with a b in the accetped region
+	std::vector<Int_t> *b_index = new std::vector<Int_t> ;
+	// start looping through the b to find the ones that came from a Z
+	for (unsigned int i = 0; i < genPdgId->size(); ++i)
+	{
+		// make sure it came from a Z (we already looking at signal events)
+		if (!((abs(genPdgId->at(i)) == 5) && (genMotherPdgId->at(i) == 23))) continue ;
+		// Now I have a b that came from a Z
+		TLorentzVector* genb = dynamic_cast<TLorentzVector*> ( genP4->At(i) ) ;
+		// Apply the fiducial accpetance to the b
+		if ( abs( genb->Eta() ) > 2.5 ) continue ;
+		// now loop through the jets from the Z->b and determine which is within dR < 0.3
+		for (int j = 0; j < jetP4->GetEntries(); ++j)
+		{
+			TLorentzVector* jet = dynamic_cast<TLorentzVector*> (jetP4->At(j)) ;
+			// calclate the dR squared with this jet and a b quark
+			Double_t dR = 0 ;
+			dR = genb->DrEtaPhi( *jet );
+			// check if dRsquared > 0.3^2
+			if (dR > 0.5 ) continue ;
+			// cout << "Jet matched to b with dRsquared = " << dRsquared << endl ;
+			// Make sure it is not claimed already
+			if (b_index->size() == 0) // then it is the first jet so we are safe to match it
+			{
+				b_index->push_back(j) ;
+			}
+			else
+			{
+				// loop thorugh the vector and make sure the jet was not cliamed already by another b quark 
+				for (unsigned int k = 0; k < b_index->size(); ++k)
+				{
+					if (  j != b_index->at(k) )
+					{
+						b_index->push_back(j) ;
+					}
+				}
+			}
+		}
+	}	
+
+	n_jets_matched_to_b_from_Z_in_fidacc = b_index->size() ;
+	v_njets_btag_value->push_back(n_jets_matched_to_b_from_Z_in_fidacc) ;
+	b_index->clear() ;
+	// cout << "N jets matched to b quarks from a Z = " << n_jets_matched_to_b_from_Z_in_fidacc << endl ;
+return v_njets_btag_value;
+}
+
+
+std::vector<Double_t>* Get_n_btagged_jets_matched_to_Z_in_fidacc( 	std::vector<Double_t>* genPdgId , 
+																	std::vector<Double_t>* genMotherPdgId , 
+																	TClonesArray* genP4 , TClonesArray* jetP4 , 
+																	std::vector<float> *btagger , 
+																	TString working_point, 
+																	TH1D* h_tagger_value )
+{
+	std::vector<Double_t> *v_njets_btag_value = new std::vector<Double_t> ;
+	Double_t n_jets_matched_to_b_from_Z_in_fidacc = 0 ;
+	Double_t Working_Point = 0 ;
+	if (working_point == "No_Tag")
+	{
+		Working_Point = 0 ;
+	}
+	else if(working_point == "Loose" )
+	{
+		Working_Point = 0.432 ;
+	}
+	else if (working_point == "Medium")
+	{
+		Working_Point = 0.841 ;
+	}	
+	else if (working_point == "Tight")
+	{
+		Working_Point = 0.941 ;
+	}
+	else 
+	{
+		Working_Point = 0 ;
+		cout << " !!! Error in working points !!!" << endl;
+	}
+	// Start with a b in the accetped region
+	std::vector<Int_t> *b_index = new std::vector<Int_t> ;
+	// start looping through the b
+	cout << "Start looping through the b quarks that came from a Z to match to jet "  << endl ;
+	for (unsigned int i = 0; i < genPdgId->size(); ++i)
+	{
+		// make sure it came from a Z (we already looking at signal events)
+		if (!((abs(genPdgId->at(i)) == 5) && (genMotherPdgId->at(i) == 23))) continue ;
+		TLorentzVector* genb = dynamic_cast<TLorentzVector*> ( genP4->At(i) ) ;
+		// Apply the fiducial accpetance to the b
+		if ( abs( genb->Eta() ) > 2.5 ) continue ;
+		cout << " B quark from Z identified at index " << i << " with Eta = " << genb->Eta() << endl ;
+		// now loop through the jets from Z and determine which is within dR
+		for (int j = 0; j < jetP4->GetEntries(); ++j)
+		{
+			cout << "Looking for jet within dR < 0.5 to this b quark" << endl ;
+			TLorentzVector* jet = dynamic_cast<TLorentzVector*> (jetP4->At(j)) ;
+			if ( Working_Point != 0 )
+			{
+				if (btagger->at(j) < Working_Point) continue;
+			}
+			// calclate the dR squared with this jet and a b quark
+			Double_t dR = 0 ;
+			dR = genb->DrEtaPhi( *jet );
+			cout << "Jet at index " << j << " has dR = " << dR << endl ;
+			// check if dRsquared > 0.3^2
+			if (dR > 0.5 ) continue ;
+			cout << "Jet was within range" << endl ;
+			// Make sure it is not claimed already
+			if (b_index->size() == 0) // then it is the first jet so we are safe to match it
+			{
+				b_index->push_back(j) ;
+				h_tagger_value->Fill(btagger->at(j)) ;
+			}
+			else
+			{
+				// loop thorugh the vector and make sure the jet was not cliamed already by another b quark 
+				Double_t not_claimed = 0 ;
+				for (unsigned int k = 0; k < b_index->size(); ++k)
+				{
+					if ( j != b_index->at(k) ) 
+					{
+						not_claimed = not_claimed + 1 ;
+					}
+				}
+				if ( not_claimed == b_index->size() ) // then all the indexes are taken already so it is safe to add the jet as matched to the b
+				{
+					b_index->push_back(j) ;
+					h_tagger_value->Fill(btagger->at(j)) ;
+				}
+			}
+		}
+	}	
+
+	n_jets_matched_to_b_from_Z_in_fidacc = Double_t(b_index->size()) ;
+	v_njets_btag_value->push_back(n_jets_matched_to_b_from_Z_in_fidacc) ;
+	b_index->clear() ;
+	// cout << "N jets matched to b quarks from a Z = " << n_jets_matched_to_b_from_Z_in_fidacc << endl ;
+return v_njets_btag_value;
+}
+
+
+void Plot_n_jets_in_Signal(std::vector<TTree*> *v_trees)
+{
+	cout << "Looking at number of jets in the signal region"  <<endl ;
+	TTree* tree = new TTree();
+
+	// X will be the Z_pt and y will be njets
+	TH2D* h_2D_njets_Z_pt = new TH2D("h_2D_njets_Z_pt", "Njets as a function of Z Pt" , 20, 0, 1000, 10, 0, 7);
+	// loop over the trees
+	for (unsigned int i = 0; i < v_trees->size(); ++i)
+		{
+			tree = v_trees->at(i) ;	
+
+			std::vector<Double_t> *jetMotherPdgId  = new std::vector<Double_t>;
+			std::vector<Double_t> *genPdgId = new std::vector<Double_t>;
+			std::vector<Double_t> *genMotherPdgId = new std::vector<Double_t>;
+			std::vector<float> *btagger = new std::vector<float> ;	
+			TClonesArray *jetP4 = new TClonesArray() ;
+			TClonesArray *genP4 = new TClonesArray() ; 
+			TClonesArray *metP4 = new TClonesArray() ;
+			float mcWeight;
+
+			tree->SetBranchAddress("jetMotherPdgId", &jetMotherPdgId) ;
+			tree->SetBranchAddress("genPdgId", &genPdgId) ;
+			tree->SetBranchAddress("genMotherPdgId", &genMotherPdgId) ;
+			tree->SetBranchAddress("jetP4", &jetP4) ;
+			tree->SetBranchAddress("genP4", &genP4) ;
+			tree->SetBranchAddress("mcWeight",&mcWeight) ;
+			tree->SetBranchAddress("metP4", &metP4) ;
+			tree->SetBranchAddress("CombinedInclusiveSecondaryVertexV2", &btagger) ;
+
+			Double_t nentries = tree->GetEntries() ;
+			// Decrease the number of entries for testing to 0.05%
+			nentries = nentries  ;
+			// cout << "Looping over " << nentries << " events in dataset " << i << endl ;
+			for (int j = 0; j < nentries; ++j)
+			{
+				Double_t x = 0 ;
+				tree->GetEntry(j) ;
+				if (mcWeight > 0) {mcWeight = 1;}else{mcWeight = -1;}
+				// make sure the event is signal i.e Z->bb
+				if (Two_Gen_b_Quarks_Matched_to_Z( genPdgId , genMotherPdgId , genP4 , 0) == kFALSE) continue ;
+				// Figure out the Z_pt 
+				Double_t Z_pt = Get_Z_pT_gen_level(genPdgId , genMotherPdgId ,  genP4 ) ;
+				// determine what bin this corresponds to in my Z_pt binning
+				// Int_t bin_no = int(Z_pt / 50) + 1 ;
+				Int_t nJets = 0 ;
+				nJets = jetP4->GetEntries() ;
+				// Fill my 2D histogram with the Z_pt and the njets distributions
+				h_2D_njets_Z_pt->Fill( Z_pt , nJets , mcWeight) ;
+			}
+		}
+		h_2D_njets_Z_pt->GetXaxis()->SetTitle("Z Pt") ;
+		h_2D_njets_Z_pt->GetYaxis()->SetTitle("# of Jets") ;
+		h_2D_njets_Z_pt->SetStats(0) ;
+		TCanvas* c = new TCanvas("c", "N jets as a function of Z Pt", 1000, 750) ;
+		c->SetLogy();
+		c->Divide(2,1) ;
+		c->cd(1) ;
+		h_2D_njets_Z_pt->Draw("LEGO") ;
+		c->cd(2) ;
+		h_2D_njets_Z_pt->Draw("COLZ  TEXT") ;
+		c->SaveAs("Njets_Z_pt.png") ;
+		cout << "Finished the njets as a function of Z-pt" << endl ;
+}
+
+std::vector< std::vector<Double_t>* >* Get_v_dR__ij__b_jet(std::vector<Double_t>* genPdgId ,std::vector<Double_t>* genMotherPdgId, TClonesArray*  genP4 , TClonesArray* jetP4 ) 
+{
+	// make matrix to store all the dR's
+	std::vector< std::vector<Double_t>* > *v_dR__ij__b_jet = new std::vector< std::vector<Double_t>* > ;
+	// Loop over the b-quarks
+	for (unsigned int i = 0; i < genPdgId->size() ; ++i)
+	{
+		// Get a b-quark that came from a Z
+		if (!( abs(genPdgId->at(i)) == 5 && genMotherPdgId->at(i) == 23 )) continue ;
+		TLorentzVector* genb = dynamic_cast<TLorentzVector*> (genP4->At(i)) ;
+		// now loop over the jets
+		std::vector<Double_t>* v_dR_b_jet = new std::vector<Double_t> ;
+		for (unsigned int j = 0; j < jetP4->GetEntries(); ++j)
+		{
+			TLorentzVector* jet = dynamic_cast<TLorentzVector*> ( jetP4->At(j) ) ;
+			// get dR with the b and this jet
+			Double_t dR = 0 ;
+			dR = genb->DrEtaPhi( *jet ) ;
+			v_dR_b_jet->push_back(dR) ;
+		}
+		// now push this vector into the matrix
+		v_dR__ij__b_jet->push_back( v_dR_b_jet ) ;
+	}
+return v_dR__ij__b_jet ;
+}
+
+void Output_Matrix( std::vector<std::vector<Double_t>* > *v_dR__ij__b_jet)
+{
+	for (unsigned int i = 0; i < v_dR__ij__b_jet->size(); ++i)
+	{
+		// Get a single vector and loop over, 
+		for (unsigned int j = 0; j < v_dR__ij__b_jet->at(i)->size(); ++j)
+		{
+			cout << " " << v_dR__ij__b_jet->at(i)->at(j) << " " ;
+		}
+	cout << " " << endl ;
+	}
+}
+
+std::vector<Double_t>* Get_v_dR1_i1_dR2_i2( std::vector<std::vector<Double_t>* > *v_dR__ij__b_jet)
+{
+	// Loop through the matrix and get best dR and row value of best dR
+	Double_t best_dR = 10000 ; // set to very large value 
+	Double_t best_dR_i = 0 ;
+	Double_t best_dR_j = 0 ;
+	// Find the best dR
+	for (unsigned int i = 0; i < v_dR__ij__b_jet->size(); ++i)
+	{
+		for (unsigned int j= 0; j < v_dR__ij__b_jet->at(i)->size(); ++j)
+		{
+			if ( v_dR__ij__b_jet->at(i)->at(j) < best_dR ) 
+			{
+				best_dR = v_dR__ij__b_jet->at(i)->at(j) ;
+				best_dR_i = i ;
+				best_dR_j = j ;
+			}
+		}
+	}
+	cout << "Best dR = " << best_dR << " at i = " << best_dR_i <<  " and j = " << best_dR_j << endl ;
+	// Now find the second best dR
+	Double_t second_best_dR = 10000;
+	Double_t second_best_dR_i = 0 ;
+	Double_t second_best_dR_j = 0 ;
+	for (unsigned int i = 0; i < v_dR__ij__b_jet->size(); ++i)
+	{
+		// cout << " i = " << i << endl ;
+		for (unsigned int j = 0; j < v_dR__ij__b_jet->at(i)->size(); ++j)
+		{
+			// cout << "j = " << j << endl ;
+			if ( (v_dR__ij__b_jet->at(i)->at(j) < second_best_dR) && ( j != best_dR_j) )
+			{
+				second_best_dR = v_dR__ij__b_jet->at(i)->at(j) ;
+				second_best_dR_i = i ;
+				second_best_dR_j = j ;
+			}
+		}
+	}
+	cout << "Second best dR = " << second_best_dR <<  " at i = " << second_best_dR_i << " and j = " << second_best_dR_j << endl ;
+	// Now put the values we want in the vector
+	std::vector<Double_t> *v_dR1_i1_dR2_i2 = new std::vector<Double_t> ;
+	v_dR1_i1_dR2_i2->push_back(best_dR) ; v_dR1_i1_dR2_i2->push_back(best_dR_j ) ;
+	v_dR1_i1_dR2_i2->push_back(second_best_dR) ; v_dR1_i1_dR2_i2->push_back(second_best_dR_j ) ;
+return v_dR1_i1_dR2_i2 ;
+}
+
+void Get_Efficiency_func(std::vector<TTree*> *v_trees , TString Jet_Option, Bool_t bMatched)
+{
+	cout << "Looking at Efficiency with intermediate bins and jet option " << Jet_Option <<endl ;
+	TTree* tree = new TTree();
+	TString s1 ;
+	if (bMatched == kTRUE)
+	{
+		s1 = "b_matching" ;
+	}
+	else
+	{
+		s1 = "no_b_matching" ;
+	}
+
+	Double_t Z_pt_bins[10] = {0 , 50, 100, 150, 200, 250, 300, 400, 500, 1000} ;
+
+	cout << "Creating necessary histograms" << endl;
+	// Make hists for n accepted as a function of Z_pt
+	TH1D* h_accepted_funtion_Z_pt = new TH1D("h_accepted_funtion_Z_pt" , " Accepted Z#rightarrow b#bar{b} at Gen level " + s1+ " " +Jet_Option , 9 , Z_pt_bins);
+	TH1D* h_accepted_funtion_Z_pt_pos = new TH1D("h_accepted_funtion_Z_pt_pos" , " Accepted Z#rightarrow b#bar{b} at Gen level with Pos weight " + s1+ " " +Jet_Option, 9 , Z_pt_bins);
+	TH1D* h_accepted_funtion_Z_pt_neg = new TH1D("h_accepted_funtion_Z_pt_neg" , " Accepted Z#rightarrow b#bar{b} at Gen level with Neg weight "+ s1+ " "+ Jet_Option , 9 , Z_pt_bins);
+	h_accepted_funtion_Z_pt->SetLineColor(kBlue) ;
+	h_accepted_funtion_Z_pt_neg->SetLineColor(kBlue);
+	h_accepted_funtion_Z_pt_pos->SetLineColor(kBlue) ;
+	// Make hists for n signal events where the jets were matched
+	TH1D* h_bmatched_function_Z_pt = new TH1D("h_bmatched_function_Z_pt" , " Accepted Z#rightarrow 2 b Jets "+ s1+ Jet_Option , 9 , Z_pt_bins) ;
+	TH1D* h_bmatched_function_Z_pt_pos = new TH1D("h_bmatched_function_Z_pt_pos" , " Accepted Z#rightarrow 2 b Jets with Pos weight " + s1+ " "+ Jet_Option , 9 , Z_pt_bins) ;
+	TH1D* h_bmatched_function_Z_pt_neg = new TH1D("h_bmatched_function_Z_pt_neg" , " Accepted Z#rightarrow 2 b Jets with Neg Weight "+ s1+ " " + Jet_Option, 9 , Z_pt_bins) ;
+	h_bmatched_function_Z_pt->SetLineColor(kRed) ;
+	h_bmatched_function_Z_pt_pos->SetLineColor(kRed) ;
+	h_bmatched_function_Z_pt_neg->SetLineColor(kRed) ;
+
+	TH1D* h_accepted_function_dR =  new TH1D( "h_accepted_function_dR" , "Accepted Z#rightarrow b#bar{b} at Gen Level "+ s1+ " "+ Jet_Option , 10, 0, 1 );
+	TH1D* h_accepted_function_dR_pos = new TH1D("h_accepted_function_dR_pos" , " Accepted Z#rightarrow b#bar{b} at Gen Level with postive weight "+ s1+ " "+ Jet_Option , 10, 0, 1);
+	TH1D* h_accepted_function_dR_neg = new TH1D(" h_accepted_funtion_Z_pt_neg" , " Accepted Z#rightarrow b#bar{b} at Gen Level with negative weight " + s1+ " "+ Jet_Option, 10, 0, 1) ;
+	h_accepted_function_dR->SetLineColor(kBlue) ;
+	h_accepted_function_dR_pos->SetLineColor(kBlue) ;
+	h_accepted_function_dR_neg->SetLineColor(kBlue) ;
+
+
+	TH1D* h_bmatched_function_dR = new TH1D("h_bmatched_function_dR" , "Accepted Z#rightarrow 2 b Jets "+ s1+ " " + Jet_Option, 10, 0, 1);
+	TH1D* h_bmatched_function_dR_pos = new TH1D("h_bmatched_function_dR_pos" , "Accepted Z#rightarrow 2 b Jets with Pos weight "+ s1+ " "+ Jet_Option , 10, 0, 1);
+	TH1D* h_bmatched_function_dR_neg = new TH1D("h_bmatched_function_dR_neg" , "Accepted Z#rightarrow 2 b Jets with Neg weight "+ s1+ " " + Jet_Option, 10, 0, 1);
+
+	h_bmatched_function_dR->SetLineColor(kRed) ;
+	h_bmatched_function_dR_pos->SetLineColor(kRed) ;
+	h_bmatched_function_dR_neg->SetLineColor(kRed) ;
+
+	TH1D* h_best_btagger_value = new TH1D("h_best_btagger_value" , "Best dR " , 10, 0, 1) ;
+	h_best_btagger_value->SetFillColor(kPink) ;
+	TH1D* h_second_best_btagger_value = new TH1D("h_second_best_btagger_value" , "Second best dR" , 10, 0, 1) ;
+	h_second_best_btagger_value->SetFillColor(kGreen) ;
+
+	THStack* s_btagger = new THStack("s_btagger" , " B-tagger " ) ;
+
+	TH1D* h_tagger_value = new TH1D("h_tagger_value" , " Value of b-tagger on b-matched Jets" + s1 +"_" + Jet_Option  , 20 , 0, 1) ;
+	cout << "Begin looping over Trees" << endl ;
+	// loop over the trees
+	for (unsigned int i = 0; i < v_trees->size(); ++i)
+	{
+		tree = v_trees->at(i) ;	
+
+		std::vector<Double_t> *jetMotherPdgId  = new std::vector<Double_t>;
+		std::vector<Double_t> *genPdgId = new std::vector<Double_t>;
+		std::vector<Double_t> *genMotherPdgId = new std::vector<Double_t>;
+		std::vector<float> *btagger = new std::vector<float> ;	
+		TClonesArray *jetP4 = new TClonesArray() ;
+		TClonesArray *genP4 = new TClonesArray() ; 
+		TClonesArray *metP4 = new TClonesArray() ;
+		float mcWeight;
+
+		tree->SetBranchAddress("jetMotherPdgId", &jetMotherPdgId) ;
+		tree->SetBranchAddress("genPdgId", &genPdgId) ;
+		tree->SetBranchAddress("genMotherPdgId", &genMotherPdgId) ;
+		tree->SetBranchAddress("jetP4", &jetP4) ;
+		tree->SetBranchAddress("genP4", &genP4) ;
+		tree->SetBranchAddress("mcWeight",&mcWeight) ;
+		tree->SetBranchAddress("metP4", &metP4) ;
+		tree->SetBranchAddress("CombinedInclusiveSecondaryVertexV2", &btagger) ;
+
+		Double_t nentries = tree->GetEntries() ;
+		// Decrease the number of entries for testing to 0.05%
+		nentries = nentries*0.01;
+		// cout << "Looping over " << nentries << " events in dataset " << i << endl ;
+		for ( unsigned int j = 0; j < 50; ++j)
+		{
+			cout << "Looking at event = " << j << endl ;
+			// std::vector<Double_t> *v_njets_btag_value = new std::vector<Double_t> ;
+			tree->GetEntry(j) ;
+			if (mcWeight > 0) {mcWeight = 1;}else{mcWeight = -1;}
+			
+			// make sure the event is signal i.e Z->bb with pt cut on b quarks
+			if (Two_Gen_b_Quarks_Matched_to_Z( genPdgId , genMotherPdgId , genP4 , 0 ) == kFALSE)
+			{
+				cout << "Not signal event"<< endl ;
+				continue ;
+			}
+			cout << "Event is SIGNAL" << endl ;
+			// Now figure out how many b quarks from Z are within the detector acceptance
+			Double_t n_b_in_fidacc = 0 ;
+			n_b_in_fidacc = Get_n_b_in_fidacc(genPdgId , genMotherPdgId ,  genP4 );
+			if (n_b_in_fidacc < 2) 
+			{
+				cout << "At least 1 b-quark was outside of fiducial acceptance. Go to next event " << endl ;
+				continue ; // only signal events pass	
+			}
+			cout << "Both B-quarks are in fiducial acceptance" << endl ;
+			// Figure out the Z_pt for histogram
+			Double_t Z_pt = Get_Z_pT_gen_level(genPdgId , genMotherPdgId ,  genP4 ) ;
+			// Figure out the dR between the b quarks for histogram
+			Double_t dR_bquarks = Get_dR_between_bs(genPdgId , genMotherPdgId ,  genP4) ; 
+			
+			// fill the accepted histogram
+			h_accepted_funtion_Z_pt->Fill( Z_pt , mcWeight ) ;
+			h_accepted_function_dR->Fill(dR_bquarks , mcWeight ) ;
+			//---------------------------------------------
+			if (mcWeight == 1) 
+			{
+				h_accepted_funtion_Z_pt_pos->Fill(Z_pt , 1) ;
+				h_accepted_function_dR_pos->Fill(dR_bquarks, 1) ;
+			} 
+			else 
+			{ 
+				h_accepted_funtion_Z_pt_neg->Fill(Z_pt, 1); 
+				h_accepted_function_dR_neg->Fill(dR_bquarks, 1) ;
+			}
+			//--------------------------------------------
+
+			// now figure out how many jets were matched to a b if the b is already in the accepted region
+			// Double_t n_jets_matched_to_b_from_Z_in_fidacc = 0 ;
+			// if (bMatched == kTRUE)
+			// {
+			// 	std::vector<Double_t> *v_njets_btag_value = Get_n_btagged_jets_matched_to_Z_in_fidacc( genPdgId ,genMotherPdgId ,  genP4 ,jetP4 , btagger  ,  Jet_Option , h_tagger_value) ;
+			// 	n_jets_matched_to_b_from_Z_in_fidacc = v_njets_btag_value->at(0) ;
+			// 	// Fill_btagger_hist()
+			// }
+			// else
+			// {
+			// 	n_jets_matched_to_b_from_Z_in_fidacc = jetP4->GetEntries() ;
+			// }
+
+			// // now deal with the numerator
+			// if (n_jets_matched_to_b_from_Z_in_fidacc >= 2)
+			// {
+			// 	h_bmatched_function_Z_pt->Fill(Z_pt , mcWeight) ;
+			// 	h_bmatched_function_dR->Fill(dR_bquarks, mcWeight) ;
+			// 	if (mcWeight == 1) 
+			// 	{
+			// 		h_bmatched_function_Z_pt_pos->Fill(Z_pt , 1) ;
+			// 		h_bmatched_function_dR_pos->Fill(dR_bquarks, 1) ;
+			// 	} 
+			// 	else 
+			// 	{
+			// 		h_bmatched_function_Z_pt_neg->Fill(Z_pt , 1) ;
+			// 		h_bmatched_function_dR_neg->Fill(dR_bquarks, 1) ;
+			// 	}
+			// }
+
+			// Try tighter requirement on the jet matching
+			// Find every combination of dR with a signal b and jet
+			// then select best two dR's 
+			if (bMatched == kTRUE)
+			{
+				cout << "Option selected to use b-matching" << endl ;
+				cout << "Number of jets in this event = " << jetP4->GetEntries() << endl ;
+				// Produce matrix of dR's
+				cout << "Making dR matrix" << endl;
+				std::vector< std::vector<Double_t>* >* v_dR__ij__b_jet = Get_v_dR__ij__b_jet( genPdgId , genMotherPdgId,  genP4 , jetP4 ) ;
+				// now make an output for self checking that looks like the matrix format
+				cout << "Outputing Matrix" << endl ;
+				Output_Matrix( v_dR__ij__b_jet ) ;
+				// Now get the best 2 dR's in the matrix and the indexs of the jet
+				cout << "Getting best 2 dRs" << endl ;
+				std::vector<Double_t>* v_dR1_i1_dR2_i2 = Get_v_dR1_i1_dR2_i2(v_dR__ij__b_jet) ;
+				// The requirement is that dR < 0.5. 
+				cout << "Checking if they are in the required dR < 0.5" << endl ;
+				// Check if they are both in the region
+				if (( v_dR1_i1_dR2_i2->at(0) < 0.5 ) &&  (v_dR1_i1_dR2_i2->at(2) < 0.5 ))
+				{
+					cout << "Best 2 dR's were in the required dR < 0.5" << endl ;
+					h_bmatched_function_Z_pt->Fill(Z_pt , mcWeight) ;
+					h_bmatched_function_dR->Fill(dR_bquarks, mcWeight) ;
+					if (mcWeight == 1) 
+					{
+						h_bmatched_function_Z_pt_pos->Fill(Z_pt , 1) ;
+						h_bmatched_function_dR_pos->Fill(dR_bquarks, 1) ;
+					} 
+					else 
+					{
+						h_bmatched_function_Z_pt_neg->Fill(Z_pt , 1) ;
+						h_bmatched_function_dR_neg->Fill(dR_bquarks, 1) ;
+					}
+					cout << "Filling the btagger values" << endl ;
+					// Fill the btagger values to see how the distribution looks like
+					cout << "Best dR has btagger value        = "  << btagger->at(v_dR1_i1_dR2_i2->at(1)) << endl ;
+					cout << "Second best dR has btagger value = " << btagger->at(v_dR1_i1_dR2_i2->at(3)) << endl ;
+					h_best_btagger_value->Fill( btagger->at(v_dR1_i1_dR2_i2->at(1)) , mcWeight ) ;
+					h_second_best_btagger_value->Fill(btagger->at(v_dR1_i1_dR2_i2->at(3)) , mcWeight) ;
+				}
+				else
+				{
+					cout << "Selected dR's were not within the required dR" << endl ;
+					continue ;
+				}
+			}
+			else
+			{
+				cout << "Option selected to not use b-matching" << endl ;
+				Double_t n_jets_matched_to_b_from_Z_in_fidacc = 0 ;
+				n_jets_matched_to_b_from_Z_in_fidacc = jetP4->GetEntries() ;
+				// now deal with the numerator
+				if (n_jets_matched_to_b_from_Z_in_fidacc >= 2)
+				{
+					h_bmatched_function_Z_pt->Fill(Z_pt , mcWeight) ;
+					h_bmatched_function_dR->Fill(dR_bquarks, mcWeight) ;
+					if (mcWeight == 1) 
+					{
+						h_bmatched_function_Z_pt_pos->Fill(Z_pt , 1) ;
+						h_bmatched_function_dR_pos->Fill(dR_bquarks, 1) ;
+					} 
+					else 
+					{
+						h_bmatched_function_Z_pt_neg->Fill(Z_pt , 1) ;
+						h_bmatched_function_dR_neg->Fill(dR_bquarks, 1) ;
+					}
+				}
+			}
+		}
+	}
+
+		// TCanvas* c = new TCanvas("c_Efficiency_Zpt" + s1 +"_" + Jet_Option, "c_Efficiency_Zpt" + s1 +"_" + Jet_Option , 1000, 2000) ;
+		// c->Divide(2,3) ;
+		
+		// c->cd(1) ;
+		// h_accepted_funtion_Z_pt->Draw("hist") ;
+		// h_bmatched_function_Z_pt->Draw("same hist") ;
+		
+		// c->cd(2) ;
+
+		// TGraphAsymmErrors* g_Efficiency = new TGraphAsymmErrors( h_bmatched_function_Z_pt , h_accepted_funtion_Z_pt , "n"  );
+		// g_Efficiency->Draw() ;
+		
+		// c->cd(3);
+		// h_accepted_funtion_Z_pt_pos->Draw("hist") ;
+		// h_bmatched_function_Z_pt_neg->Draw("same hist") ;
+		
+		// c->cd(4) ;
+		// TGraphAsymmErrors* g_Efficiency_pos = new TGraphAsymmErrors( h_bmatched_function_Z_pt_pos , h_accepted_funtion_Z_pt_pos , "n" ) ;
+		// g_Efficiency_pos->Draw() ;
+	
+		// c->cd(5) ;
+		// h_accepted_funtion_Z_pt_neg->Draw() ;
+		// h_bmatched_function_Z_pt_neg->Draw("same") ;
+		
+		// c->cd(6) ;
+		// TGraphAsymmErrors* g_Efficiency_neg = new TGraphAsymmErrors(h_bmatched_function_Z_pt_neg , h_accepted_funtion_Z_pt_neg, "n") ;
+		// g_Efficiency_neg->Draw() ;
+
+		// c->SaveAs("Efficiency_Zpt"+ s1 +"_" + Jet_Option+".png") ;
+		// c->Clear() ;
+		// // TString name = "Efficiency" + Jet_Option + "bmatched.png" ;
+		// // c->SaveAs(name) ;
+
+		// TCanvas *c_Eff_dR_b_quarks = new TCanvas("c_Eff_dR_b_quarks" + s1 +"_" + Jet_Option, "c_Efficiency_Eff_dR_b_quarks" + s1 +"_" + Jet_Option, 1000, 2000) ;
+		// c_Eff_dR_b_quarks->Divide(2,3) ;
+
+		// c_Eff_dR_b_quarks->cd(1);
+		// h_accepted_function_dR->Draw("hist") ;
+		// h_bmatched_function_dR->Draw("hist same") ;
+		
+		// c_Eff_dR_b_quarks->cd(2);
+		// TGraphAsymmErrors* g_Efficiency_dR = new TGraphAsymmErrors(  h_bmatched_function_dR , h_accepted_function_dR, "n" ) ;
+		// g_Efficiency_dR->Draw() ;
+		
+		// c_Eff_dR_b_quarks->cd(3);
+		// h_accepted_function_dR_pos->Draw("hist") ;
+		// h_bmatched_function_dR_pos->Draw("hist same") ;
+		
+		// c_Eff_dR_b_quarks->cd(4);
+		// TGraphAsymmErrors* g_Efficiency_dR_pos = new TGraphAsymmErrors(h_bmatched_function_dR_pos , h_accepted_function_dR_pos, "n") ;
+		// g_Efficiency_dR_pos->Draw() ;
+		
+		// c_Eff_dR_b_quarks->cd(5);
+		// h_accepted_function_dR_neg->Draw("hist") ;
+		// h_bmatched_function_dR_neg->Draw("hist same") ;
+		
+		// c_Eff_dR_b_quarks->cd(6);
+		// TGraphAsymmErrors* g_Efficiency_dR_neg = new TGraphAsymmErrors(h_bmatched_function_dR_neg, h_accepted_function_dR_neg ,"n") ;
+		// g_Efficiency_dR_neg->Draw() ;
+
+		// c_Eff_dR_b_quarks->SaveAs("Efficiency_dR "+ s1 +"_" + Jet_Option + ".png") ;
+		// c_Eff_dR_b_quarks->Clear() ;
+
+		TCanvas* c_tagger = new TCanvas("c_tagger" , "Tagger Value" , 600, 800);
+		// h_tagger_value->Draw() ;
+		s_btagger->Add(h_best_btagger_value) ;
+		s_btagger->Add(h_second_best_btagger_value) ;
+		s_btagger->Draw() ;
+		c_tagger->SaveAs("Btagger_Value_ "+ s1 +"_" + Jet_Option + ".png") ;
+
+}
+
+
+
 // Main Function
 void Z_bb_cs()
 {
 	std::vector<TTree*> *v_trees = new std::vector<TTree*> ;
-	TFile *f_TTJets = new TFile("~/cms/hist/TTJets.root") ;
-   	cout << "Found file TTJets.root" << endl;
-   	TTree *t_TTJets = (TTree*) f_TTJets->FindObjectAny("events") ; v_trees->push_back(t_TTJets) ;
+	// TFile *f_TTJets = new TFile("~/cms/hist/TTJets.root") ;
+ //   	cout << "Found file TTJets.root" << endl;
+ //   	TTree *t_TTJets = (TTree*) f_TTJets->FindObjectAny("events") ; v_trees->push_back(t_TTJets) ;
 
-   	TFile *f_WJetsToLNu = new TFile("~/cms/hist/WJetsToLNu.root") ;
-   	cout << "Found file WJetsToLNu.root" << endl;
-   	TTree* t_WJetsToLNu = (TTree*) f_WJetsToLNu->FindObjectAny("events") ; v_trees->push_back(t_WJetsToLNu) ;
+ //   	TFile *f_WJetsToLNu = new TFile("~/cms/hist/WJetsToLNu.root") ;
+ //   	cout << "Found file WJetsToLNu.root" << endl;
+ //   	TTree* t_WJetsToLNu = (TTree*) f_WJetsToLNu->FindObjectAny("events") ; v_trees->push_back(t_WJetsToLNu) ;
 
    	TFile *f_ZZTo2Q2Nu = new TFile("~/cms/hist/ZZTo2Q2Nu.root") ;
    	cout << "Found file ZZTo2Q2Nu.root" << endl;
@@ -574,9 +1415,9 @@ void Z_bb_cs()
    	cout << "Found file WZTo1L1Nu2Q.root" << endl ;
    	TTree* t_WZTo1L1Nu2Q = (TTree*) f_WZTo1L1Nu2Q->FindObjectAny("events") ; v_trees->push_back(t_WZTo1L1Nu2Q) ;
 
-   	TFile *f_WWToNuQQ = new TFile("~/cms/hist/WWToNuQQ.root") ;
-   	cout << "Found file WWToNuQQ.root" << endl;
-   	TTree* t_WWToNuQQ = (TTree*) f_WWToNuQQ->FindObjectAny("events") ; v_trees->push_back(t_WWToNuQQ) ;
+   	// TFile *f_WWToNuQQ = new TFile("~/cms/hist/WWToNuQQ.root") ;
+   	// cout << "Found file WWToNuQQ.root" << endl;
+   	// TTree* t_WWToNuQQ = (TTree*) f_WWToNuQQ->FindObjectAny("events") ; v_trees->push_back(t_WWToNuQQ) ;
 
    	// Plot the nJets distributions in the signal and background region to see what is a good cut to apply
    	//return the desired njets cut value
@@ -593,6 +1434,20 @@ void Z_bb_cs()
 
    	//Minimize_Sensitivity(v_trees, v_cut_names, v_cut_min, v_cut_max , v_cut_increments) ;
 
-	Signal_Z_bb_jets(v_trees);
+	// Signal_Z_bb_jets(v_trees);
+
+	// N_jets_and_Zbb(v_trees );
+
+	// Plot_All_Efficiency(v_trees) ;
+
+	// Plot_dR_between_b_and_jet(v_trees );
+
+	// Plot_n_jets_in_Signal(v_trees) ;
+	Get_Efficiency_func( v_trees , "No_Tag" , kTRUE) ;
+	// Get_Efficiency_func( v_trees , "No_Tag" , kFALSE) ;
+	// Get_Efficiency_func(v_trees , "Loose" , kTRUE) ;
+	// Get_Efficiency_func(v_trees , "Medium" , kTRUE) ;
+	// Get_Efficiency_func(v_trees , "Tight" , kTRUE) ;
+	// Get_Efficiency_func( v_trees , "No_Tag" , kFALSE) ;
 
 }
